@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026 Robert August Vincent II <pillarsdotnet@gmail.com> -->
+<!-- Co-author: Claude Code. -->
+<!-- US Letter, landscape. Print at 100% scale on inkjet transparency film. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="11in" height="8.5in" viewBox="0 0 1100 850">
+  <defs>
+    <!-- One call participant: head and shoulders. Colour comes from the <use>. -->
+    <symbol id="person" viewBox="0 0 144 125">
+      <circle cx="72" cy="50" r="23"/>
+      <ellipse cx="72" cy="128" rx="50" ry="44"/>
+    </symbol>
+  </defs>
+
+  <rect width="1100" height="850" fill="#000"/>
+
+  <text x="550" y="155" text-anchor="middle" fill="#e00000"
+        font-family="DejaVu Sans, Arial Black, Arial, Helvetica, sans-serif"
+        font-weight="900" font-size="75" textLength="946" lengthAdjust="spacingAndGlyphs">CAMERA ON WHEN LIT</text>
+
+  <g transform="translate(0 22)">
+  <!-- Webcam "on" rays -->
+  <g fill="none" stroke="#00e060" stroke-width="5" stroke-linecap="round">
+    <path d="M 536 199 A 18 18 0 0 1 564 199"/>
+    <path d="M 527 190 A 30 30 0 0 1 573 190"/>
+  </g>
+
+  <!-- Laptop lid -->
+  <rect x="300" y="200" width="500" height="360" rx="18" fill="#f5ecd7" stroke="#8b5a2b" stroke-width="6"/>
+  <circle cx="550" cy="213" r="6" fill="#00ff66"/>
+
+  <!-- Display -->
+  <rect x="318" y="226" width="464" height="314" fill="#0a0a14"/>
+
+  <!-- Participant tiles, 3 x 2 -->
+  <g>
+    <rect x="326" y="234" width="144" height="125" rx="6" fill="#16304a"/>
+    <use xlink:href="#person" x="326" y="234" width="144" height="125" fill="#f2b880"/>
+    <rect x="478" y="234" width="144" height="125" rx="6" fill="#3a1f4a"/>
+    <use xlink:href="#person" x="478" y="234" width="144" height="125" fill="#8d5a3b"/>
+    <rect x="630" y="234" width="144" height="125" rx="6" fill="#1f4230"/>
+    <use xlink:href="#person" x="630" y="234" width="144" height="125" fill="#e7c9a0"/>
+    <rect x="326" y="367" width="144" height="125" rx="6" fill="#4a3216"/>
+    <use xlink:href="#person" x="326" y="367" width="144" height="125" fill="#c68c5c"/>
+    <rect x="478" y="367" width="144" height="125" rx="6" fill="#16404a"/>
+    <use xlink:href="#person" x="478" y="367" width="144" height="125" fill="#5c3a26"/>
+    <rect x="630" y="367" width="144" height="125" rx="6" fill="#4a1630"/>
+    <use xlink:href="#person" x="630" y="367" width="144" height="125" fill="#f0d0b0"/>
+  </g>
+  <!-- Active speaker -->
+  <rect x="478" y="234" width="144" height="125" rx="6" fill="none" stroke="#00e060" stroke-width="5"/>
+
+  <!-- LIVE badge -->
+  <rect x="334" y="242" width="72" height="24" rx="5" fill="#e00000"/>
+  <circle cx="347" cy="254" r="5" fill="#fff"/>
+  <text x="356" y="261" fill="#fff" font-family="DejaVu Sans, Arial, Helvetica, sans-serif"
+        font-weight="700" font-size="17">LIVE</text>
+
+  <!-- Call controls -->
+  <rect x="318" y="500" width="464" height="40" fill="#15151f"/>
+  <g fill="#d8d8d8">
+    <!-- Microphone -->
+    <rect x="484" y="508" width="10" height="16" rx="5"/>
+    <path d="M 481 518 A 8 8 0 0 0 497 518" fill="none" stroke="#d8d8d8" stroke-width="2.5"/>
+    <rect x="488" y="526" width="2.5" height="6"/>
+    <!-- Camera -->
+    <rect x="522" y="511" width="20" height="16" rx="3"/>
+    <path d="M 543 519 L 553 512 L 553 526 Z"/>
+  </g>
+  <!-- Hang up -->
+  <rect x="572" y="508" width="46" height="24" rx="12" fill="#e00000"/>
+  <path d="M 583 523 Q 595 511 607 523" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Laptop base -->
+  <path d="M 262 560 L 838 560 L 872 596 Q 876 606 864 606 L 236 606 Q 224 606 228 596 Z"
+        fill="#f5ecd7" stroke="#8b5a2b" stroke-width="6" stroke-linejoin="round"/>
+  <rect x="505" y="563" width="90" height="7" rx="3" fill="#8b5a2b"/>
+  </g>
+
+  <text x="550" y="740" text-anchor="middle" fill="#ffb000"
+        font-family="DejaVu Sans, Arial Black, Arial, Helvetica, sans-serif"
+        font-weight="900" font-size="63" textLength="950" lengthAdjust="spacingAndGlyphs">ENTER AT YOUR OWN RISK</text>
+</svg>
