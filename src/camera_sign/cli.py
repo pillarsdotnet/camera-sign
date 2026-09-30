@@ -58,7 +58,13 @@ class Plug:
             )
             if device is None:
                 raise KasaException(f"no Kasa device answered at {self.host}")
-            await device.update()
+            try:
+                await device.update()
+            except BaseException:
+                # Not kept yet, so close() cannot reach it; release its session here.
+                with contextlib.suppress(*PLUG_ERRORS):
+                    await device.disconnect()
+                raise
             self._device = device
         return self._device
 
