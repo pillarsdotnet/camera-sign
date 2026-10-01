@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright (c) 2026 Robert August Vincent II <pillarsdotnet@gmail.com> -->
 <!-- Co-author: Claude Code. -->
-<!-- US Letter, landscape. Print at 100% scale on inkjet transparency film. -->
+<!-- US Letter, portrait. Print at 100% scale on inkjet transparency film. -->
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="11in" height="8.5in" viewBox="0 0 1100 850">
+     width="8.5in" height="11in" viewBox="0 0 850 1100">
   <defs>
     <!-- One call participant: head and shoulders. Colour comes from the <use>. -->
     <symbol id="person" viewBox="0 0 144 125">
@@ -12,13 +12,16 @@
     </symbol>
   </defs>
 
-  <rect width="1100" height="850" fill="#000"/>
+  <rect width="850" height="1100" fill="#000"/>
 
-  <text x="550" y="155" text-anchor="middle" fill="#e00000"
+  <text x="425" y="175" text-anchor="middle" fill="#e00000"
         font-family="DejaVu Sans, Arial Black, Arial, Helvetica, sans-serif"
-        font-weight="900" font-size="75" textLength="946" lengthAdjust="spacingAndGlyphs">CAMERA ON WHEN LIT</text>
+        font-weight="900" font-size="100" textLength="677" lengthAdjust="spacingAndGlyphs">CAMERA ON</text>
+  <text x="425" y="262" text-anchor="middle" fill="#e00000"
+        font-family="DejaVu Sans, Arial Black, Arial, Helvetica, sans-serif"
+        font-weight="900" font-size="72" textLength="392" lengthAdjust="spacingAndGlyphs">(when lit)</text>
 
-  <g transform="translate(0 22)">
+  <g transform="translate(-125 155)">
   <!-- Webcam "on" rays -->
   <g fill="none" stroke="#00e060" stroke-width="5" stroke-linecap="round">
     <path d="M 536 199 A 18 18 0 0 1 564 199"/>
@@ -77,7 +80,10 @@
   <rect x="505" y="563" width="90" height="7" rx="3" fill="#8b5a2b"/>
   </g>
 
-  <text x="550" y="740" text-anchor="middle" fill="#ffb000"
+  <text x="425" y="880" text-anchor="middle" fill="#ffb000"
         font-family="DejaVu Sans, Arial Black, Arial, Helvetica, sans-serif"
-        font-weight="900" font-size="63" textLength="950" lengthAdjust="spacingAndGlyphs">ENTER AT YOUR OWN RISK</text>
+        font-weight="900" font-size="100" textLength="538" lengthAdjust="spacingAndGlyphs">ENTER AT</text>
+  <text x="425" y="995" text-anchor="middle" fill="#ffb000"
+        font-family="DejaVu Sans, Arial Black, Arial, Helvetica, sans-serif"
+        font-weight="900" font-size="100" textLength="578" lengthAdjust="spacingAndGlyphs">OWN RISK</text>
 </svg>

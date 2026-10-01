@@ -31,10 +31,11 @@ way.
 ### The insert
 
 There are two to choose from: [`print/on-air.svg`](print/on-air.svg), a plain
-"ON AIR", and [`print/camera-on.svg`](print/camera-on.svg), which reads "CAMERA
-ON WHEN LIT" and "ENTER AT YOUR OWN RISK" around a laptop on a video call.
+"ON AIR" printed landscape, and [`print/camera-on.svg`](print/camera-on.svg),
+printed portrait, which reads "CAMERA ON (when lit)" and "ENTER AT OWN RISK"
+around a laptop on a video call.
 
-Print either one at 100% scale, landscape, on the
+Print either one at 100% scale, in its own orientation, on the
 rough (coated) side of the film. Let it dry fully before handling it. Inkjet
 black lets some light through; if the background glows, print a second copy
 and stack the two sheets, lined up, in the frame.
