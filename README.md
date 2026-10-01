@@ -5,7 +5,16 @@ Co-author: Claude Code.
 
 # camera-sign
 
-Light an "ON AIR" sign elsewhere in the house whenever the webcam is live, so
+## Background
+
+I work from home and live with a disabled and self-conscious wife. I got tired
+of her asking me, with an anxious voice, "Is the camera on?" And she got very
+upset the one time she forgot to ask and I told her, after she had walked
+across my background, "By the way, the camera was on just now." Hence this app.
+
+## Functionality
+
+Light an "ON AIR" sign somewhere in the house whenever the webcam is live, so
 the people at home know not to walk in.
 
 It works with any program that uses the camera -- `Teams` in a browser,
@@ -16,17 +25,17 @@ off.
 
 ## Hardware
 
-| Part                                    | Role                      |
-| --------------------------------------- | ------------------------- |
-| TP-Link `Kasa` EP10 smart plug          | Switches the sign's power |
-| `Cjgyz` 8.5 × 11 tabletop LED light box | The sign                  |
-| Inkjet transparency film, US Letter     | The "ON AIR" insert       |
+| Part                                    | Role                      | Price |
+| --------------------------------------- | ------------------------- | ----- |
+| [TP-Link `Kasa` EP10 smart plug](https://www.amazon.com/dp/B091699Z3W) | Switches the sign's power | $10 |
+| [`Cjgyz` 8.5 × 11 tabletop LED light box](https://www.amazon.com/dp/B0H17GX6XJ) | The sign | $26 |
+| [Inkjet transparency film, US Letter](https://www.amazon.com/dp/B0GFT4WND1) | The "ON AIR" insert | $7 |
 
 The sign has to light as soon as it gets power. Before relying on it, plug
 it into the EP10, turn it on at its own switch, then turn the plug off and on
 from the `Kasa` app. If the sign stays dark after the plug comes back on, it
 needs a press of its button after every power cut and cannot be used this
-way.
+way. The one I bought works fine.
 
 ### The insert
 
