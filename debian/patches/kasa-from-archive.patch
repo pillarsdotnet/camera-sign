@@ -1,0 +1,18 @@
+Description: Take python-kasa from the system instead of git
+ Upstream pins python-kasa to a git commit, for an unreleased fix. The
+ package depends on python3-kasa built from that same commit, so a version
+ range is enough, and an offline build cannot fetch git anyway.
+Author: Robert August Vincent II (Bob) <pillarsdotnet@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-10-02
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -12,7 +12,7 @@ dependencies = [
+   "dbus-fast>=2.0",
+   # Unreleased fix: EP10 firmware 1.1.x logs in with KLAP v2 (python-kasa PR 1731).
+   # Return to a version range once a release after 0.10.2 includes it.
+-  "python-kasa @ git+https://github.com/python-kasa/python-kasa@998ebe79e825d4e1f25013037b7b33fd0569bf6b",
++  "python-kasa>=0.10.2",
+ ]
+ 
+ [project.scripts]

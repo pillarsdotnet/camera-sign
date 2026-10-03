@@ -1,0 +1,32 @@
+camera-sign for Debian
+======================
+
+The package installs the command and a systemd user unit, but enables the
+unit for nobody. To use it:
+
+1. Set up the plug in the Kasa app, and give it a fixed address with a DHCP
+   reservation. "kasa discover" (from python3-kasa) finds it.
+
+2. Tell camera-sign where the plug is:
+
+     mkdir -p ~/.config/camera-sign
+     cp /usr/share/doc/camera-sign/examples/env.example ~/.config/camera-sign/env
+     editor ~/.config/camera-sign/env
+
+   CAMERA_SIGN_HOST is the plug's address. Newer Kasa firmware also needs
+   CAMERA_SIGN_USERNAME and CAMERA_SIGN_PASSWORD, the TP-Link account the
+   plug was set up with; "camera-sign on" fails with an authentication error
+   without them.
+
+3. Check it, then start the service:
+
+     set -a; . ~/.config/camera-sign/env; set +a
+     camera-sign on && sleep 3 && camera-sign off
+     systemctl --user enable --now camera-sign
+     journalctl --user -u camera-sign -f
+
+The sign inserts to print are in /usr/share/camera-sign/print/: on-air.svg
+prints landscape, camera-on.svg portrait. Print at 100% on the rough side of
+inkjet transparency film.
+
+ -- Robert August Vincent II (Bob) <pillarsdotnet@gmail.com>  Fri, 02 Oct 2026 22:30:00 -0400
