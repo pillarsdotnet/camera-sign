@@ -5,7 +5,7 @@ name = "camera-sign"
 version = "0.1.0"
 description = "Light an on-air sign, through a Kasa smart plug, while the webcam is open"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = "GPL-3.0-or-later"
 authors = [{ name = "Robert August Vincent II", email = "pillarsdotnet@gmail.com" }]
 requires-python = ">=3.11"
 dependencies = [

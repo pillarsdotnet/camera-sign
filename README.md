@@ -114,4 +114,5 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 
 ## Licence
 
-BSD 3-Clause; see [`LICENSE`](LICENSE).
+GNU General Public License, version 3 or (at your option) any later
+version; see [`LICENSE`](LICENSE).
