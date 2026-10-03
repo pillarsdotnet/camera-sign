@@ -57,6 +57,24 @@ never left lit by accident.
 
 ## Install
 
+On Ubuntu 24.04 (`noble`), 26.04 (`resolute`) or 26.10 (`stonking`), the
+Debian package in
+[`ppa:pillarsdotnet/ppa`](https://launchpad.net/~pillarsdotnet/+archive/ubuntu/ppa)
+brings the `python3-kasa` it needs from the same PPA too:
+
+```sh
+sudo add-apt-repository ppa:pillarsdotnet/ppa
+sudo apt install camera-sign
+```
+
+It installs the command, the `systemd` user unit (enabled for nobody), the
+example settings at `/usr/share/doc/camera-sign/examples/env.example`, and the
+printable inserts in `/usr/share/camera-sign/print/`. Then set it up with
+`/usr/share/doc/camera-sign/README.Debian`: the same steps as below, but using
+the copies the package installed instead of downloading them.
+
+Elsewhere, install it with `uv`:
+
 1. Set up the plug in the `Kasa` app, then give it a fixed address with a DHCP
    reservation on the router. Find its address with `kasa discover`.
 
