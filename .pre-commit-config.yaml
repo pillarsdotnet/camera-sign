@@ -13,6 +13,8 @@ repos:
       - id: check-yaml
       - id: end-of-file-fixer
       - id: trailing-whitespace
+        # A blank context line in a quilt patch is a single space.
+        exclude: ^debian/patches/
 
   - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
     rev: v9.24.0

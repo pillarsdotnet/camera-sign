@@ -1,0 +1,16 @@
+#! /usr/bin/make -f
+
+export PYBUILD_DESTDIR=debian/camera-sign
+
+%:
+	dh $@ --buildsystem=pybuild
+
+# Upstream's unit runs the copy "uv tool install" puts in ~/.local/bin, so
+# install it with the path rewritten. dh_installsystemduser still finds it and
+# adds its state tracking, but enables it for nobody on a fresh install: each
+# user opts in with "systemctl --user enable".
+execute_after_dh_install:
+	install -d debian/camera-sign/usr/lib/systemd/user
+	sed 's|%h/\.local/bin/camera-sign|/usr/bin/camera-sign|' \
+		systemd/camera-sign.service \
+		> debian/camera-sign/usr/lib/systemd/user/camera-sign.service

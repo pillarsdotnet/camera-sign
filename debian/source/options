@@ -1,0 +1,3 @@
+# The packaging branch keeps trailing-whitespace out of debian/patches/;
+# that pre-commit tweak is not part of the upstream source.
+extend-diff-ignore = "^\.pre-commit-config\.yaml$"
