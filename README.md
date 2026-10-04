@@ -183,12 +183,28 @@ or later.
    journal reports `watching the cameras on phone ...` at startup; open the
    phone's camera, and the sign lights two seconds later.
 
+To stop the phone lighting the sign for a while -- say, a video call on it
+from another room -- switch the phone off, and back on afterwards:
+
+```sh
+camera-sign phone off
+camera-sign phone on
+camera-sign phone        # say which it is
+```
+
+The running service notices within a second, with no restart, and logs the
+change. The setting is a file, `~/.local/state/camera-sign/phone-off`, so it
+lasts through restarts and reboots until switched back on. The webcam is
+watched either way.
+
 ## Usage
 
 ```text
 camera-sign [watch]   keep the sign in step with the camera (the default)
 camera-sign on|off    switch the sign once
 camera-sign status    say whether the camera is in use
+camera-sign phone [on|off]
+                      watch the phone's cameras or not, or say which
 ```
 
 Add `--phone SERIAL` (or set `CAMERA_SIGN_PHONE`) to watch a phone's cameras

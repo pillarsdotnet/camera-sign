@@ -136,3 +136,38 @@ def test_wifi_phone_is_reconnected(tmp_path, monkeypatch):
     # Two failed checks, but only one reconnect inside RECONNECT_EVERY.
     assert calls.count("connect 10.0.0.9:5555") == 1
     assert len(calls) == 3
+
+
+def test_phone_switch(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    assert cli.phone_enabled()
+    assert cli.main(["phone", "off"]) == 0
+    assert not cli.phone_enabled()
+    assert cli.main(["phone"]) == 0
+    assert cli.main(["phone", "on"]) == 0
+    assert cli.phone_enabled()
+    assert capsys.readouterr().out.splitlines() == [
+        "watching the phone: off",
+        "watching the phone: off",
+        "watching the phone: on",
+    ]
+
+
+def test_phone_switch_needs_no_plug(monkeypatch):
+    monkeypatch.delenv("CAMERA_SIGN_HOST", raising=False)
+    assert parse_args(["phone", "off"]).setting == "off"
+    with pytest.raises(SystemExit):
+        parse_args(["status", "on"])
+
+
+def test_switched_off_phone_is_not_asked(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "camera_in_use", lambda: False)
+
+    class BusyPhone:
+        async def in_use(self):
+            return True
+
+    assert asyncio.run(cli.any_camera_in_use(BusyPhone())) is True
+    cli.set_phone_enabled(False)
+    assert asyncio.run(cli.any_camera_in_use(BusyPhone())) is False

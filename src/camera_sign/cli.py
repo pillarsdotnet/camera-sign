@@ -8,7 +8,9 @@ every open handle, so reading a single file under `/sys` answers the
 question for every user on the machine without special permissions.
 
 An Android phone reachable over `adb` can be watched too: its camera
-service lists every app holding a camera open.
+service lists every app holding a camera open.  `camera-sign phone off`
+pauses that, and `camera-sign phone on` resumes it, in a running watcher
+as well, by way of a flag file under `$XDG_STATE_HOME`.
 """
 
 import argparse
@@ -44,6 +46,27 @@ def camera_in_use(refcnt: Path = REFCNT) -> bool:
     except FileNotFoundError:
         # The driver is not loaded, so no camera can be open.
         return False
+
+
+def phone_off_flag() -> Path:
+    """Return the file whose presence pauses watching the phone."""
+    state = os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state"
+    return Path(state) / "camera-sign" / "phone-off"
+
+
+def phone_enabled() -> bool:
+    """Return whether the phone is to be watched."""
+    return not phone_off_flag().exists()
+
+
+def set_phone_enabled(on: bool) -> None:
+    """Resume or pause watching the phone, for every watcher of this user."""
+    flag = phone_off_flag()
+    if on:
+        flag.unlink(missing_ok=True)
+    else:
+        flag.parent.mkdir(parents=True, exist_ok=True)
+        flag.touch()
 
 
 def phone_cameras_open(dump: str) -> bool:
@@ -230,8 +253,10 @@ def _word(on: bool) -> str:
 
 
 async def any_camera_in_use(phone: Phone | None) -> bool:
-    """Return whether the webcam, or the phone if there is one, is in use."""
-    return camera_in_use() or (phone is not None and await phone.in_use())
+    """Return whether the webcam, or the phone if there is one and it is on, is in use."""
+    if camera_in_use():
+        return True
+    return phone is not None and phone_enabled() and await phone.in_use()
 
 
 async def watch(args: argparse.Namespace, plug: Plug, phone: Phone | None = None) -> None:
@@ -265,9 +290,13 @@ async def watch(args: argparse.Namespace, plug: Plug, phone: Phone | None = None
         log.warning("cannot watch for suspend, the sign may stay lit through it: %s", exc)
 
     log.info("watching %s, plug at %s", REFCNT, plug.host)
-    if phone is not None:
-        log.info("watching the cameras on phone %s", phone.serial)
+    phone_on = None
     while not stop.is_set():
+        if phone is not None and phone_on != (phone_on := phone_enabled()):
+            if phone_on:
+                log.info("watching the cameras on phone %s", phone.serial)
+            else:
+                log.info("not watching phone %s: switched off with camera-sign phone", phone.serial)
         in_use = await any_camera_in_use(phone)
         now = time.monotonic()
         want = debouncer.update(in_use, now)
@@ -299,8 +328,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "command",
         nargs="?",
         default="watch",
-        choices=["watch", "on", "off", "status"],
-        help="watch the camera (default), switch the sign once, or report the camera",
+        choices=["watch", "on", "off", "status", "phone"],
+        help="watch the camera (default), switch the sign once, report the camera,"
+        " or report or switch watching the phone",
+    )
+    parser.add_argument(
+        "setting", nargs="?", choices=["on", "off"], help="after phone: watch it or not"
     )
     parser.add_argument("--host", default=env("CAMERA_SIGN_HOST"), help="plug address")
     parser.add_argument("--username", default=env("CAMERA_SIGN_USERNAME"))
@@ -323,7 +356,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
-    if args.command != "status" and not args.host:
+    if args.setting is not None and args.command != "phone":
+        parser.error(f"{args.command} takes no on or off")
+    if args.command not in ("status", "phone") and not args.host:
         parser.error("set --host or CAMERA_SIGN_HOST to the plug's address")
     return args
 
@@ -340,6 +375,11 @@ def main(argv: list[str] | None = None) -> int:
         # python-kasa logs every reconnect attempt; keep the journal readable.
         logging.getLogger("kasa").setLevel(logging.WARNING)
 
+    if args.command == "phone":
+        if args.setting is not None:
+            set_phone_enabled(args.setting == "on")
+        print(f"watching the phone: {_word(phone_enabled())}")
+        return 0
     phone = Phone(args.phone) if args.phone else None
     if args.command == "status":
         print("camera in use" if asyncio.run(any_camera_in_use(phone)) else "camera idle")
