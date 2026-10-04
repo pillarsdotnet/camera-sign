@@ -21,10 +21,14 @@ Depends:
  python3-kasa (>= 0.10.2+git20260930.998ebe7),
  ${misc:Depends},
  ${python3:Depends},
+Suggests:
+ adb,
 Description: light an on-air sign while the webcam is in use
  camera-sign watches the uvcvideo driver's reference count and switches a
  TP-Link Kasa smart plug on while any program has the webcam open, and off a
  few seconds after it closes. Plugged into the switched outlet, a light box
  with an "ON AIR" insert tells the household not to walk in.
+ .
+ It can also watch the cameras of an Android phone, over adb.
  .
  It runs as a systemd user service; see README.Debian for setting it up.

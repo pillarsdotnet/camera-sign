@@ -6,6 +6,9 @@ The camera counts as live whenever any process holds a video device
 open.  The `uvcvideo` driver's module reference count rises by one for
 every open handle, so reading a single file under `/sys` answers the
 question for every user on the machine without special permissions.
+
+An Android phone reachable over `adb` can be watched too: its camera
+service lists every app holding a camera open.
 """
 
 import argparse
@@ -28,6 +31,8 @@ from camera_sign.debounce import Debouncer
 
 REFCNT = Path("/sys/module/uvcvideo/refcnt")
 PLUG_ERRORS = (KasaException, OSError, TimeoutError)
+ADB_TIMEOUT = 3.0
+RECONNECT_EVERY = 30.0
 
 log = logging.getLogger("camera-sign")
 
@@ -39,6 +44,87 @@ def camera_in_use(refcnt: Path = REFCNT) -> bool:
     except FileNotFoundError:
         # The driver is not loaded, so no camera can be open.
         return False
+
+
+def phone_cameras_open(dump: str) -> bool:
+    """Return whether `dumpsys media.camera` output lists an open camera.
+
+    The section reads `Active Camera Clients:` then `[]` when idle, or one
+    `(Camera ID: ...)` line per app holding a camera.
+    """
+    _, found, rest = dump.partition("Active Camera Clients:")
+    if not found:
+        raise ValueError("no camera client list in dumpsys output")
+    clients, _, _ = rest.partition("Allowed user IDs:")
+    return "(Camera ID:" in clients
+
+
+class Phone:
+    """An Android phone whose cameras are read over `adb`.
+
+    A serial of the form `host:port` is a phone on Wi-Fi.  The `adb` server
+    forgets such a phone when the network drops or the server restarts, so
+    while it fails to answer it is reconnected now and then, in the
+    background, so that the webcam is never kept waiting.
+    """
+
+    def __init__(self, serial: str):
+        self.serial = serial
+        self._failing = False
+        self._reconnect: asyncio.Task | None = None
+        self._last_reconnect = -RECONNECT_EVERY
+
+    async def _adb(self, *args: str) -> str:
+        proc = await asyncio.create_subprocess_exec(
+            "adb", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), ADB_TIMEOUT)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise
+        if proc.returncode != 0:
+            raise OSError(err.decode(errors="replace").strip() or f"adb exited {proc.returncode}")
+        return out.decode(errors="replace")
+
+    async def _connect(self) -> None:
+        with contextlib.suppress(OSError, TimeoutError):
+            log.debug(
+                "adb connect %s: %s", self.serial, (await self._adb("connect", self.serial)).strip()
+            )
+
+    def _start_reconnect(self) -> None:
+        now = time.monotonic()
+        if ":" not in self.serial or self._reconnect is not None and not self._reconnect.done():
+            return
+        if now - self._last_reconnect < RECONNECT_EVERY:
+            return
+        self._last_reconnect = now
+        self._reconnect = asyncio.create_task(self._connect())
+
+    async def in_use(self) -> bool:
+        """Return whether any app on the phone has a camera open.
+
+        An unreachable phone counts as idle, so the webcam still works alone.
+        """
+        try:
+            busy = phone_cameras_open(
+                await self._adb("-s", self.serial, "shell", "dumpsys", "media.camera")
+            )
+        except (OSError, TimeoutError, ValueError) as exc:
+            # Warn once per outage rather than on every check.
+            level = logging.DEBUG if self._failing else logging.WARNING
+            log.log(
+                level, "cannot read the cameras on %s: %s", self.serial, str(exc) or "timed out"
+            )
+            self._failing = True
+            self._start_reconnect()
+            return False
+        if self._failing:
+            log.info("phone %s is answering again", self.serial)
+            self._failing = False
+        return busy
 
 
 class Plug:
@@ -143,7 +229,12 @@ def _word(on: bool) -> str:
     return "on" if on else "off"
 
 
-async def watch(args: argparse.Namespace, plug: Plug) -> None:
+async def any_camera_in_use(phone: Phone | None) -> bool:
+    """Return whether the webcam, or the phone if there is one, is in use."""
+    return camera_in_use() or (phone is not None and await phone.in_use())
+
+
+async def watch(args: argparse.Namespace, plug: Plug, phone: Phone | None = None) -> None:
     """Keep the plug in step with the camera until told to stop."""
     debouncer = Debouncer(on_delay=args.on_delay, off_delay=args.off_delay)
     stop = asyncio.Event()
@@ -174,9 +265,12 @@ async def watch(args: argparse.Namespace, plug: Plug) -> None:
         log.warning("cannot watch for suspend, the sign may stay lit through it: %s", exc)
 
     log.info("watching %s, plug at %s", REFCNT, plug.host)
+    if phone is not None:
+        log.info("watching the cameras on phone %s", phone.serial)
     while not stop.is_set():
+        in_use = await any_camera_in_use(phone)
         now = time.monotonic()
-        want = debouncer.update(camera_in_use(), now)
+        want = debouncer.update(in_use, now)
         # Tell the plug again now and then, in case someone pressed its button
         # or it lost power; a failed send is retried on the next tick.
         if want != sent or now - last_sent >= args.refresh:
@@ -211,6 +305,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--host", default=env("CAMERA_SIGN_HOST"), help="plug address")
     parser.add_argument("--username", default=env("CAMERA_SIGN_USERNAME"))
     parser.add_argument("--password", default=env("CAMERA_SIGN_PASSWORD"))
+    parser.add_argument(
+        "--phone",
+        default=env("CAMERA_SIGN_PHONE") or None,
+        metavar="SERIAL",
+        help="also watch the cameras of this adb device (serial, or host:port over Wi-Fi)",
+    )
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between checks")
     parser.add_argument(
         "--on-delay", type=float, default=2.0, help="seconds the camera must stay open"
@@ -240,12 +340,13 @@ def main(argv: list[str] | None = None) -> int:
         # python-kasa logs every reconnect attempt; keep the journal readable.
         logging.getLogger("kasa").setLevel(logging.WARNING)
 
+    phone = Phone(args.phone) if args.phone else None
     if args.command == "status":
-        print("camera in use" if camera_in_use() else "camera idle")
+        print("camera in use" if asyncio.run(any_camera_in_use(phone)) else "camera idle")
         return 0
     plug = Plug(args.host, args.username, args.password)
     if args.command == "watch":
-        asyncio.run(watch(args, plug))
+        asyncio.run(watch(args, plug, phone))
         return 0
     return asyncio.run(switch(plug, args.command == "on"))
 

@@ -64,6 +64,40 @@ The watcher also switches the sign off when it stops (at logout, for
 instance) and just before the laptop suspends or hibernates, so the sign is
 never left lit by accident.
 
+### An Android phone too
+
+The sign can also light while a phone's camera is in use -- a video call
+on the phone, or the camera app. The watcher asks the phone, over `adb`,
+which apps hold a camera open (`dumpsys media.camera`), once a second
+while the webcam is idle. If the phone cannot be reached, it counts as
+idle, and the webcam still works alone.
+
+1. Install `adb` (`sudo apt install adb`), and turn on USB debugging on the
+   phone (Settings → About phone → tap Build number seven times, then
+   Settings → System → Developer options → USB debugging).
+
+2. Plug the phone in, unlocked, with its USB mode set to File transfer,
+   and accept the "Allow USB debugging?" prompt. `adb devices` should list
+   it as `device`.
+
+3. To use it over Wi-Fi rather than a cable, give the phone a DHCP
+   reservation like the plug's, then:
+
+   ```sh
+   adb tcpip 5555
+   adb connect 192.168.1.51:5555
+   ```
+
+   The phone can then be unplugged. It stops listening when it restarts;
+   plug it in and run `adb tcpip 5555` again.
+
+4. Set `CAMERA_SIGN_PHONE` to the phone's serial (from `adb devices`), or to
+   its `address:port` on Wi-Fi, and check it:
+
+   ```sh
+   camera-sign status --phone 192.168.1.51:5555
+   ```
+
 ## Install
 
 On Ubuntu 24.04 (`noble`), 26.04 (`resolute`) or 26.10 (`stonking`), the
