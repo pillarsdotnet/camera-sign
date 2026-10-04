@@ -23,6 +23,11 @@ app. When anything opens the camera, a `Kasa` smart plug switches on and powers
 the sign. When the camera has been closed for a few seconds, the plug switches
 off.
 
+It can watch an Android phone's cameras as well, so a video call taken on
+the phone lights the sign just as one on the laptop does. The phone is
+reached over `adb`, by USB cable or over Wi-Fi; see
+[Watching a phone too](#watching-a-phone-too).
+
 ## Hardware
 
 | Part                                                                            | Role                      | Price |
@@ -64,39 +69,21 @@ The watcher also switches the sign off when it stops (at logout, for
 instance) and just before the laptop suspends or hibernates, so the sign is
 never left lit by accident.
 
-### An Android phone too
+### On a phone
 
-The sign can also light while a phone's camera is in use -- a video call
-on the phone, or the camera app. The watcher asks the phone, over `adb`,
-which apps hold a camera open (`dumpsys media.camera`), once a second
-while the webcam is idle. If the phone cannot be reached, it counts as
-idle, and the webcam still works alone.
+Android keeps a list of the apps holding each camera open, and
+`adb shell dumpsys media.camera` prints it under `Active Camera Clients`:
+`[]` when nothing has a camera, or one line per app -- the camera app, a
+video call, anything. The watcher reads that list once a second, but only
+while the webcam is idle, since either one is enough to light the sign.
+Each check takes about a fifth of a second, over USB or Wi-Fi.
 
-1. Install `adb` (`sudo apt install adb`), and turn on USB debugging on the
-   phone (Settings → About phone → tap Build number seven times, then
-   Settings → System → Developer options → USB debugging).
-
-2. Plug the phone in, unlocked, with its USB mode set to File transfer,
-   and accept the "Allow USB debugging?" prompt. `adb devices` should list
-   it as `device`.
-
-3. To use it over Wi-Fi rather than a cable, give the phone a DHCP
-   reservation like the plug's, then:
-
-   ```sh
-   adb tcpip 5555
-   adb connect 192.168.1.51:5555
-   ```
-
-   The phone can then be unplugged. It stops listening when it restarts;
-   plug it in and run `adb tcpip 5555` again.
-
-4. Set `CAMERA_SIGN_PHONE` to the phone's serial (from `adb devices`), or to
-   its `address:port` on Wi-Fi, and check it:
-
-   ```sh
-   camera-sign status --phone 192.168.1.51:5555
-   ```
+A phone that does not answer within 3 seconds -- out of the house, asleep
+off the network, unplugged -- counts as idle, so the webcam goes on working
+alone. The journal says so once, not every second, and again when the phone
+comes back. The `adb` server forgets a Wi-Fi phone when the network drops or
+the server restarts, so while one is not answering the watcher runs
+`adb connect` again every 30 seconds, without holding up the webcam check.
 
 ## Install
 
@@ -152,6 +139,50 @@ Elsewhere, install it with `uv`:
    journalctl --user -u camera-sign -f
    ```
 
+## Watching a phone too
+
+This needs `adb` (`sudo apt install adb`) and a phone running Android 11
+or later.
+
+1. Turn on USB debugging on the phone: Settings → About phone → tap Build
+   number seven times, then Settings → System → Developer options → USB
+   debugging.
+
+2. Plug the phone in, unlocked. A Pixel's USB mode defaults to No data, and
+   `adb` cannot see it until that changes: open Settings → Connected
+   devices → USB and choose File transfer. Accept the "Allow USB
+   debugging?" prompt, ticking Always allow, and `adb devices` lists the
+   phone as `device`.
+
+   If `lsusb` shows no Google device at all, the phone is not making a data
+   connection. Try the other way up at the phone end, clear lint out of
+   its port with a wooden toothpick, or try another cable; some cables
+   only carry power.
+
+3. Move it to Wi-Fi, so the phone can be unplugged. Give it a fixed address
+   with a DHCP reservation, as for the plug, then:
+
+   ```sh
+   adb tcpip 5555
+   adb connect 192.168.1.51:5555
+   ```
+
+   The phone stops listening on Wi-Fi when it restarts; plug it in and run
+   `adb tcpip 5555` again.
+
+4. Add the phone to `~/.config/camera-sign/env`, check it, and restart the
+   service:
+
+   ```sh
+   echo 'CAMERA_SIGN_PHONE=192.168.1.51:5555' >> ~/.config/camera-sign/env
+   camera-sign status --phone 192.168.1.51:5555
+   systemctl --user restart camera-sign
+   ```
+
+   Use the serial from `adb devices` instead to stay on the cable. The
+   journal reports `watching the cameras on phone ...` at startup; open the
+   phone's camera, and the sign lights two seconds later.
+
 ## Usage
 
 ```text
@@ -160,7 +191,9 @@ camera-sign on|off    switch the sign once
 camera-sign status    say whether the camera is in use
 ```
 
-Run `camera-sign --help` for the timing options.
+Add `--phone SERIAL` (or set `CAMERA_SIGN_PHONE`) to watch a phone's cameras
+too, with `watch` or `status`. Run `camera-sign --help` for the timing
+options.
 
 ## Development
 
