@@ -1,3 +1,16 @@
+camera-sign (0.1.0+git20261004.bee06e8-1~ppa1~ubuntu26.04.1) resolute; urgency=medium
+
+  * New upstream snapshot, from git bee06e8 (2026-10-04).
+    - Light the sign while an Android phone's camera is in use too, read
+      over adb, by USB or Wi-Fi: set CAMERA_SIGN_PHONE (or --phone) to the
+      phone's adb serial or address:port.
+    - "camera-sign phone on|off" switches watching the phone, in a running
+      watcher as well, without a restart.
+  * debian/control: Suggests adb.
+  * debian/README.Debian: point to the phone setup in README.md.
+
+ -- Robert August Vincent II (Bob) <pillarsdotnet@gmail.com>  Sun, 04 Oct 2026 08:26:15 -0400
+
 camera-sign (0.1.0+git20261002.e01832a-1~ppa1~ubuntu26.04.1) resolute; urgency=medium
 
   * Initial package, from git e01832a (2026-10-02).
