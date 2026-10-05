@@ -69,6 +69,21 @@ The watcher also switches the sign off when it stops (at logout, for
 instance) and just before the laptop suspends or hibernates, so the sign is
 never left lit by accident.
 
+### When the plug stops answering
+
+A plug that has dropped off the network fails silently: the camera opens,
+and the sign stays dark. So the watcher tells the plug what to do once a
+minute even when nothing has changed, and, while that fails, tries again
+every second. The moment the plug stops answering, a desktop notification
+says so, and it stays on screen until dismissed; when the plug answers
+again, a second notification replaces it. The journal records both as well.
+
+A plug can stop answering this one laptop while the `Kasa` app and other
+machines on the network still reach it. That happened once after a Wi-Fi
+outage, lasted about 50 minutes, and cleared without anything being changed;
+unplugging the plug did not help. Until the second notification appears,
+switch the sign by hand, from the `Kasa` app or the plug's button.
+
 ### On a phone
 
 Android keeps a list of the apps holding each camera open, and

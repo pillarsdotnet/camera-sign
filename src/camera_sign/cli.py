@@ -11,6 +11,10 @@ An Android phone reachable over `adb` can be watched too: its camera
 service lists every app holding a camera open.  `camera-sign phone off`
 pauses that, and `camera-sign phone on` resumes it, in a running watcher
 as well, by way of a flag file under `$XDG_STATE_HOME`.
+
+The watcher raises a desktop notification whenever the plug stops
+answering, and again when it answers once more, since a sign that cannot
+be switched fails silently otherwise.
 """
 
 import argparse
@@ -30,6 +34,7 @@ from kasa import Device, Discover, KasaException
 
 from camera_sign import __version__
 from camera_sign.debounce import Debouncer
+from camera_sign.notify import Notifier
 
 REFCNT = Path("/sys/module/uvcvideo/refcnt")
 PLUG_ERRORS = (KasaException, OSError, TimeoutError)
@@ -151,12 +156,23 @@ class Phone:
 
 
 class Plug:
-    """A `Kasa` smart plug, reconnected on demand after any failure."""
+    """A `Kasa` smart plug, reconnected on demand after any failure.
 
-    def __init__(self, host: str, username: str | None, password: str | None):
+    `on_change`, if given, is awaited whenever the plug stops answering,
+    with the error, and whenever it answers again, with `None`.
+    """
+
+    def __init__(
+        self,
+        host: str,
+        username: str | None,
+        password: str | None,
+        on_change: Callable[[str | None], Awaitable[None]] | None = None,
+    ):
         self.host = host
         self.username = username
         self.password = password
+        self.on_change = on_change
         self._device: Device | None = None
         self._failing = False
 
@@ -193,12 +209,17 @@ class Plug:
             # Warn once per outage rather than on every retry.
             level = logging.DEBUG if self._failing else logging.WARNING
             log.log(level, "could not switch %s %s: %s", self.host, _word(on), exc)
-            self._failing = True
             await self.close()
+            if not self._failing:
+                self._failing = True
+                if self.on_change is not None:
+                    await self.on_change(str(exc) or type(exc).__name__)
             return False
         if self._failing:
             log.info("plug at %s is answering again", self.host)
             self._failing = False
+            if self.on_change is not None:
+                await self.on_change(None)
         return True
 
 
@@ -250,6 +271,24 @@ class SleepGuard:
 
 def _word(on: bool) -> str:
     return "on" if on else "off"
+
+
+def notify_plug_changes(plug: Plug, notifier: Notifier) -> None:
+    """Show a notification each time the plug stops or starts answering."""
+
+    async def on_change(error: str | None) -> None:
+        if error is None:
+            await notifier.show(
+                "On-air sign plug is back", f"The plug at {plug.host} is answering again."
+            )
+        else:
+            await notifier.show(
+                "On-air sign plug is not answering",
+                f"The sign cannot be switched until the plug at {plug.host} answers. {error}",
+                urgent=True,
+            )
+
+    plug.on_change = on_change
 
 
 async def any_camera_in_use(phone: Phone | None) -> bool:
@@ -386,6 +425,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     plug = Plug(args.host, args.username, args.password)
     if args.command == "watch":
+        notify_plug_changes(plug, Notifier())
         asyncio.run(watch(args, plug, phone))
         return 0
     return asyncio.run(switch(plug, args.command == "on"))
