@@ -15,6 +15,7 @@
 # Needs the full git history, dpkg-dev, devscripts and dput, and, unless
 # --dry-run, DEBSIGN_KEYID naming a secret key in gpg that Launchpad knows.
 # --dry-run builds the unsigned source packages and uploads nothing.
+# DPUT_TARGET names the dput host to upload to; it defaults to the PPA by FTP.
 set -euo pipefail
 
 PPA_OWNER=pillarsdotnet
@@ -96,7 +97,7 @@ EOF
   fi
   debsign -k"$DEBSIGN_KEYID" --no-re-sign "$changes"
   # One series failing to upload should not hold back the others.
-  dput "ppa:$PPA_OWNER/$PPA_NAME" "$changes" || failed="$failed $series"
+  dput "${DPUT_TARGET:-ppa:$PPA_OWNER/$PPA_NAME}" "$changes" || failed="$failed $series"
 done
 
 if [ -n "$failed" ]; then
