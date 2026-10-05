@@ -40,7 +40,12 @@ jobs:
       - name: Import the signing key
         env:
           KEY: ${{ secrets.LAUNCHPAD_SIGNING_KEY }}
-        run: printf '%s\n' "$KEY" | gpg --batch --import
+          KEY_ID: ${{ vars.LAUNCHPAD_SIGNING_KEY_ID }}
+        run: |
+          printf '%s\n' "$KEY" | gpg --batch --import
+          # dput checks the signature before uploading, and calls a key of
+          # unknown trust an error.
+          echo "$KEY_ID:6:" | gpg --batch --import-ownertrust
 
       - name: Build, sign and upload
         env:
