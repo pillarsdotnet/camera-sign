@@ -1,3 +1,12 @@
+camera-sign (0.1.0+git20261005.f541993-1~ppa1~ubuntu26.04.1) resolute; urgency=medium
+
+  * New upstream snapshot, from git f541993 (2026-10-05).
+    - Raise a desktop notification when the sign's plug stops answering,
+      which stays on screen until dismissed, and another when it answers
+      again.
+
+ -- Robert August Vincent II (Bob) <pillarsdotnet@gmail.com>  Mon, 05 Oct 2026 11:18:05 -0400
+
 camera-sign (0.1.0+git20261004.bee06e8-1~ppa1~ubuntu26.04.1) resolute; urgency=medium
 
   * New upstream snapshot, from git bee06e8 (2026-10-04).
