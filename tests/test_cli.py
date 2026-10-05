@@ -171,3 +171,70 @@ def test_switched_off_phone_is_not_asked(tmp_path, monkeypatch):
     assert asyncio.run(cli.any_camera_in_use(BusyPhone())) is True
     cli.set_phone_enabled(False)
     assert asyncio.run(cli.any_camera_in_use(BusyPhone())) is False
+
+
+class FlakyDevice:
+    """A plug whose network comes and goes at the test's say-so."""
+
+    answering = True
+
+    async def update(self):
+        pass
+
+    async def turn_on(self):
+        if not self.answering:
+            raise TimeoutError("Timed out getting discovery response for 10.0.0.9")
+
+    turn_off = turn_on
+
+    async def disconnect(self):
+        pass
+
+
+def test_plug_reports_each_change_once(monkeypatch):
+    device = FlakyDevice()
+
+    async def discover_single(host, **kwargs):
+        if not device.answering:
+            raise TimeoutError("Timed out getting discovery response for 10.0.0.9")
+        return device
+
+    monkeypatch.setattr(cli.Discover, "discover_single", discover_single)
+    changes = []
+
+    async def on_change(error):
+        changes.append(error)
+
+    async def flap():
+        plug = Plug("10.0.0.9", None, None, on_change)
+        assert await plug.set(True)
+        device.answering = False
+        assert not await plug.set(True)
+        assert not await plug.set(True)
+        device.answering = True
+        assert await plug.set(True)
+        assert await plug.set(True)
+
+    asyncio.run(flap())
+    assert changes == ["Timed out getting discovery response for 10.0.0.9", None]
+
+
+def test_plug_change_notifications(monkeypatch):
+    shown = []
+
+    class FakeNotifier:
+        async def show(self, summary, body="", urgent=False):
+            shown.append((summary, urgent))
+
+    plug = Plug("10.0.0.9", None, None)
+    cli.notify_plug_changes(plug, FakeNotifier())
+
+    async def flap():
+        await plug.on_change("timed out")
+        await plug.on_change(None)
+
+    asyncio.run(flap())
+    assert shown == [
+        ("On-air sign plug is not answering", True),
+        ("On-air sign plug is back", False),
+    ]
