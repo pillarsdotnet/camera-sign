@@ -1,0 +1,98 @@
+#!/bin/bash
+# Copyright (c) 2026 Robert August Vincent II <pillarsdotnet@gmail.com>
+# Co-author: Claude Code.
+#
+# Build signed source packages of HEAD for every supported Ubuntu series and
+# upload them to the PPA, where Launchpad builds them.
+#
+# Usage: .github/ppa-upload [--dry-run]
+#
+# The upstream version is the pyproject.toml version plus the commit's UTC
+# time and hash, so every push sorts above the one before it. The changelog
+# entry lists the commits since the version Launchpad last published; it is
+# written into the build tree only, never committed.
+#
+# Needs the full git history, dpkg-dev, devscripts and dput, and, unless
+# --dry-run, DEBSIGN_KEYID naming a secret key in gpg that Launchpad knows.
+# --dry-run builds the unsigned source packages and uploads nothing.
+set -euo pipefail
+
+PPA_OWNER=pillarsdotnet
+PPA_NAME=ppa
+SERIES="noble:24.04 resolute:26.04 stonking:26.10"
+
+dry_run=false
+[ "${1:-}" = --dry-run ] && dry_run=true
+
+repo="$(git rev-parse --show-toplevel)"
+cd "$repo"
+
+sha="$(git rev-parse --short=7 HEAD)"
+stamp="$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d%H%M%S HEAD)"
+base="$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)"
+upstream="$base+git$stamp.$sha"
+
+# The newest camera-sign in the PPA, published or still building.
+last="$(curl -fsS "https://api.launchpad.net/1.0/~$PPA_OWNER/+archive/ubuntu/$PPA_NAME?ws.op=getPublishedSources&source_name=camera-sign&exact_match=true&order_by_date=true" |
+  python3 -c 'import json, sys; e = json.load(sys.stdin)["entries"]; print(e[0]["source_package_version"] if e else "")')"
+last_sha="$(sed -n 's/^.*+git[0-9]*\.\([0-9a-f]\{7,\}\)-.*$/\1/p' <<<"$last")"
+echo "newest in the PPA: ${last:-nothing}; this commit: $upstream" >&2
+
+if [ -n "$last_sha" ] && git cat-file -e "$last_sha^{commit}" 2>/dev/null; then
+  if git merge-base --is-ancestor HEAD "$last_sha"; then
+    echo "$sha is already in the PPA, or older than what is; nothing to upload" >&2
+    exit 0
+  fi
+  range="$last_sha..HEAD"
+else
+  range="HEAD^!"
+fi
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+subjects="$work/subjects"
+git log --no-merges --format=%s "$range" >"$subjects"
+
+tree="$work/camera-sign-$upstream"
+git archive --format=tar --prefix="camera-sign-$upstream/" HEAD ':!debian' |
+  gzip -n9 >"$work/camera-sign_$upstream.orig.tar.gz"
+tar -xzf "$work/camera-sign_$upstream.orig.tar.gz" -C "$work"
+git archive HEAD debian | tar -x -C "$tree"
+cp "$tree/debian/changelog" "$work/changelog.committed"
+
+maintainer="$(sed -n 's/^Maintainer: //p' debian/control)"
+date="$(date -R)"
+
+for entry in $SERIES; do
+  series="${entry%%:*}"
+  version="$upstream-1~ppa1~ubuntu${entry#*:}.1"
+  python3 - "$tree/debian/changelog" "$work/changelog.committed" "$subjects" \
+    "$version" "$series" "$sha" "$stamp" "$maintainer" "$date" <<'EOF'
+import sys
+import textwrap
+
+path, committed, subjects, version, series, sha, stamp, maintainer, date = sys.argv[1:]
+day = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}"
+lines = [f"camera-sign ({version}) {series}; urgency=medium", ""]
+lines.append(f"  * New upstream snapshot, from git {sha} ({day}).")
+for subject in open(subjects).read().splitlines():
+    # "feat: notify on the desktop" reads as "Notify on the desktop".
+    _, colon, text = subject.partition(": ")
+    text = text if colon else subject
+    text = text[:1].upper() + text[1:]
+    lines += textwrap.wrap(text, 74, initial_indent="    - ", subsequent_indent="      ")
+lines += ["", f" -- {maintainer}  {date}", "", ""]
+open(path, "w").write("\n".join(lines) + open(committed).read())
+EOF
+  (cd "$tree" && dpkg-buildpackage -S -sa -d -nc -us -uc >"$work/$version.log" 2>&1) || {
+    cat "$work/$version.log" >&2
+    exit 1
+  }
+  changes="$work/camera-sign_${version}_source.changes"
+  if $dry_run; then
+    echo "built $changes (dry run: not signed or uploaded)" >&2
+    head -12 "$tree/debian/changelog" >&2
+    continue
+  fi
+  debsign -k"$DEBSIGN_KEYID" --no-re-sign "$changes"
+  dput "ppa:$PPA_OWNER/$PPA_NAME" "$changes"
+done
