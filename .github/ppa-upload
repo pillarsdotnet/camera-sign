@@ -61,6 +61,7 @@ cp "$tree/debian/changelog" "$work/changelog.committed"
 
 maintainer="$(sed -n 's/^Maintainer: //p' debian/control)"
 date="$(date -R)"
+failed=""
 
 for entry in $SERIES; do
   series="${entry%%:*}"
@@ -94,5 +95,11 @@ EOF
     continue
   fi
   debsign -k"$DEBSIGN_KEYID" --no-re-sign "$changes"
-  dput "ppa:$PPA_OWNER/$PPA_NAME" "$changes"
+  # One series failing to upload should not hold back the others.
+  dput "ppa:$PPA_OWNER/$PPA_NAME" "$changes" || failed="$failed $series"
 done
+
+if [ -n "$failed" ]; then
+  echo "upload failed for:$failed" >&2
+  exit 1
+fi
