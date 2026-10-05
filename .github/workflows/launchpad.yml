@@ -1,0 +1,48 @@
+# Copyright (c) 2026 Robert August Vincent II <pillarsdotnet@gmail.com>
+# Co-author: Claude Code.
+# Upload a source package of every push to main to ppa:pillarsdotnet/ppa,
+# for each supported Ubuntu series; Launchpad then builds it.
+#
+# Needs the repository secret LAUNCHPAD_SIGNING_KEY (an armoured secret key
+# without a passphrase, registered on the Launchpad account) and the variable
+# LAUNCHPAD_SIGNING_KEY_ID (its fingerprint).
+name: Launchpad
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One upload at a time; a push made while one runs waits, and only the newest
+# waiting push is uploaded, since it carries the commits of the ones before.
+concurrency:
+  group: launchpad
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The changelog lists every commit since the last upload.
+          fetch-depth: 0
+
+      - name: Install the Debian tools
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            dpkg-dev devscripts dput
+
+      - name: Import the signing key
+        env:
+          KEY: ${{ secrets.LAUNCHPAD_SIGNING_KEY }}
+        run: printf '%s\n' "$KEY" | gpg --batch --import
+
+      - name: Build, sign and upload
+        env:
+          DEBSIGN_KEYID: ${{ vars.LAUNCHPAD_SIGNING_KEY_ID }}
+        run: .github/ppa-upload
