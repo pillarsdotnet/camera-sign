@@ -226,12 +226,19 @@ number, but turning it _back_ on needs only a tap on the phone -- no cable.
    ```
 
 3. **After every phone restart, turn wireless debugging back on** -- the
-   phone always switches it off. Add its quick-settings tile (Developer
-   options → Quick settings developer tiles → Wireless debugging) and it is
-   one swipe and a tap. The watcher then finds the new port by itself,
-   within half a minute; nothing needs touching at the laptop end. Until
-   the toggle goes back on, the phone counts as idle, the desktop
-   notification says so, and the webcam still lights the sign.
+   phone always switches it off. Give it a quick-settings tile so that
+   takes one swipe and a tap: in Settings → System → Developer options,
+   open Quick settings developer tiles and switch on Wireless debugging.
+   The tile joins the quick-settings panel by itself.
+
+   After a restart, swipe down from the top of the screen (twice, or once
+   with two fingers, for the full panel) and tap the Wireless debugging
+   tile. The first tap on a network asks "Allow wireless debugging on this
+   network?" -- tick Always allow on this network, and later taps at home
+   will not ask. The watcher then finds the new port by itself, within
+   half a minute; nothing needs touching at the laptop end. Until the
+   toggle goes back on, the phone counts as idle, the desktop notification
+   says so, and the webcam still lights the sign.
 
 To stop the phone lighting the sign for a while -- say, a video call on it
 from another room -- switch the phone off, and back on afterwards:
