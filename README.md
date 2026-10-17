@@ -95,8 +95,10 @@ Each check takes about a fifth of a second, over USB or Wi-Fi.
 
 A phone that does not answer within 3 seconds -- out of the house, asleep
 off the network, unplugged -- counts as idle, so the webcam goes on working
-alone. The journal says so once, not every second, and again when the phone
-comes back. The `adb` server forgets a Wi-Fi phone when the network drops or
+alone. A desktop notification says so, as when the plug stops answering,
+and a second one replaces it when the phone comes back; the journal records
+both, once each, not every second. So carrying the phone out of the house
+raises the notification, and coming home clears it. The `adb` server forgets a Wi-Fi phone when the network drops or
 the server restarts, so while one is not answering the watcher runs
 `adb connect` again every 30 seconds, without holding up the webcam check.
 
@@ -197,6 +199,39 @@ or later.
    Use the serial from `adb devices` instead to stay on the cable. The
    journal reports `watching the cameras on phone ...` at startup; open the
    phone's camera, and the sign lights two seconds later.
+
+### Wireless debugging instead of a cable
+
+The `adb tcpip 5555` route above has a catch: the phone forgets it at every
+restart, and turning it back on needs the USB cable again. Android 11's
+wireless debugging can take its place, with a different catch: **the phone
+turns wireless debugging off at every restart too**, along with its port
+number, but turning it _back_ on needs only a tap on the phone -- no cable.
+
+1. On the phone, turn on Settings → System → Developer options → Wireless
+   debugging. A laptop the phone already trusts over USB debugging needs no
+   pairing; a fresh one pairs once with `adb pair`, from the Pair device
+   with pairing code button in the same screen.
+
+2. Wireless debugging listens on a different port after every restart, so a
+   fixed `address:port` cannot name it. The watcher finds the current port
+   over mDNS instead, with `avahi-browse`
+   (`sudo apt install avahi-utils`), given `mdns:` and the phone's real
+   serial from `adb devices`:
+
+   ```sh
+   echo 'CAMERA_SIGN_PHONE=mdns:52221JEBF23974' >> ~/.config/camera-sign/env
+   camera-sign status --phone mdns:52221JEBF23974
+   systemctl --user restart camera-sign
+   ```
+
+3. **After every phone restart, turn wireless debugging back on** -- the
+   phone always switches it off. Add its quick-settings tile (Developer
+   options → Quick settings developer tiles → Wireless debugging) and it is
+   one swipe and a tap. The watcher then finds the new port by itself,
+   within half a minute; nothing needs touching at the laptop end. Until
+   the toggle goes back on, the phone counts as idle, the desktop
+   notification says so, and the webcam still lights the sign.
 
 To stop the phone lighting the sign for a while -- say, a video call on it
 from another room -- switch the phone off, and back on afterwards:

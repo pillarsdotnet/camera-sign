@@ -23,6 +23,7 @@ Depends:
  ${python3:Depends},
 Suggests:
  adb,
+ avahi-utils,
 Description: light an on-air sign while the webcam is in use
  camera-sign watches the uvcvideo driver's reference count and switches a
  TP-Link Kasa smart plug on while any program has the webcam open, and off a

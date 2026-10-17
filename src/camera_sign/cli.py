@@ -12,9 +12,9 @@ service lists every app holding a camera open.  `camera-sign phone off`
 pauses that, and `camera-sign phone on` resumes it, in a running watcher
 as well, by way of a flag file under `$XDG_STATE_HOME`.
 
-The watcher raises a desktop notification whenever the plug stops
-answering, and again when it answers once more, since a sign that cannot
-be switched fails silently otherwise.
+The watcher raises a desktop notification whenever the plug or the
+phone stops answering, and again when it answers once more, since both
+failures are silent otherwise: a camera opens, and the sign stays dark.
 """
 
 import argparse
@@ -40,6 +40,8 @@ REFCNT = Path("/sys/module/uvcvideo/refcnt")
 PLUG_ERRORS = (KasaException, OSError, TimeoutError)
 ADB_TIMEOUT = 3.0
 RECONNECT_EVERY = 30.0
+MDNS_PREFIX = "mdns:"
+MDNS_TYPE = "_adb-tls-connect._tcp"
 
 log = logging.getLogger("camera-sign")
 
@@ -94,17 +96,32 @@ class Phone:
     forgets such a phone when the network drops or the server restarts, so
     while it fails to answer it is reconnected now and then, in the
     background, so that the webcam is never kept waiting.
+
+    A serial of the form `mdns:SERIAL` is a phone with wireless debugging
+    on, which listens on a new port after every reboot and advertises it
+    over mDNS.  The address and port are read from `avahi-browse`, on the
+    first check and again whenever the phone stops answering.
+
+    `on_change`, if given, is awaited whenever the phone stops answering,
+    with the error, and whenever it answers again, with `None`.
     """
 
-    def __init__(self, serial: str):
+    def __init__(
+        self,
+        serial: str,
+        on_change: Callable[[str | None], Awaitable[None]] | None = None,
+    ):
         self.serial = serial
+        self.on_change = on_change
+        self._mdns = serial.removeprefix(MDNS_PREFIX) if serial.startswith(MDNS_PREFIX) else None
+        self._target: str | None = None if self._mdns else serial
         self._failing = False
         self._reconnect: asyncio.Task | None = None
         self._last_reconnect = -RECONNECT_EVERY
 
-    async def _adb(self, *args: str) -> str:
+    async def _run(self, *argv: str) -> str:
         proc = await asyncio.create_subprocess_exec(
-            "adb", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
             out, err = await asyncio.wait_for(proc.communicate(), ADB_TIMEOUT)
@@ -113,14 +130,34 @@ class Phone:
             await proc.wait()
             raise
         if proc.returncode != 0:
-            raise OSError(err.decode(errors="replace").strip() or f"adb exited {proc.returncode}")
+            raise OSError(
+                err.decode(errors="replace").strip() or f"{argv[0]} exited {proc.returncode}"
+            )
         return out.decode(errors="replace")
 
+    async def _adb(self, *args: str) -> str:
+        return await self._run("adb", *args)
+
+    async def _discover(self) -> str | None:
+        """Return the phone's wireless-debugging `host:port`, found over mDNS."""
+        out = await self._run("avahi-browse", "--terminate", "--resolve", "--parsable", MDNS_TYPE)
+        for line in out.splitlines():
+            found, _, proto, name, _, _, _, address, port = (line.split(";") + [""] * 9)[:9]
+            if found == "=" and proto == "IPv4" and name.startswith(f"adb-{self._mdns}-"):
+                return f"{address}:{port}"
+        return None
+
     async def _connect(self) -> None:
+        self._last_reconnect = time.monotonic()
         with contextlib.suppress(OSError, TimeoutError):
-            log.debug(
-                "adb connect %s: %s", self.serial, (await self._adb("connect", self.serial)).strip()
-            )
+            if self._mdns is not None:
+                self._target = await self._discover() or self._target
+            if self._target is not None:
+                log.debug(
+                    "adb connect %s: %s",
+                    self._target,
+                    (await self._adb("connect", self._target)).strip(),
+                )
 
     def _start_reconnect(self) -> None:
         now = time.monotonic()
@@ -137,8 +174,12 @@ class Phone:
         An unreachable phone counts as idle, so the webcam still works alone.
         """
         try:
+            if self._target is None and not self._failing:
+                await self._connect()  # the first look for the phone waits for mDNS
+            if self._target is None:
+                raise OSError("wireless debugging is not advertised on the network")
             busy = phone_cameras_open(
-                await self._adb("-s", self.serial, "shell", "dumpsys", "media.camera")
+                await self._adb("-s", self._target, "shell", "dumpsys", "media.camera")
             )
         except (OSError, TimeoutError, ValueError) as exc:
             # Warn once per outage rather than on every check.
@@ -146,12 +187,17 @@ class Phone:
             log.log(
                 level, "cannot read the cameras on %s: %s", self.serial, str(exc) or "timed out"
             )
-            self._failing = True
             self._start_reconnect()
+            if not self._failing:
+                self._failing = True
+                if self.on_change is not None:
+                    await self.on_change(str(exc) or "timed out")
             return False
         if self._failing:
             log.info("phone %s is answering again", self.serial)
             self._failing = False
+            if self.on_change is not None:
+                await self.on_change(None)
         return busy
 
 
@@ -291,6 +337,25 @@ def notify_plug_changes(plug: Plug, notifier: Notifier) -> None:
     plug.on_change = on_change
 
 
+def notify_phone_changes(phone: Phone, notifier: Notifier) -> None:
+    """Show a notification each time the phone stops or starts answering."""
+
+    async def on_change(error: str | None) -> None:
+        if error is None:
+            await notifier.show(
+                "On-air sign phone is back", f"The phone at {phone.serial} is answering again."
+            )
+        else:
+            await notifier.show(
+                "On-air sign phone is not answering",
+                f"The phone's cameras cannot light the sign until {phone.serial} answers;"
+                f" the webcam still can. {error}",
+                urgent=True,
+            )
+
+    phone.on_change = on_change
+
+
 async def any_camera_in_use(phone: Phone | None) -> bool:
     """Return whether the webcam, or the phone if there is one and it is on, is in use."""
     if camera_in_use():
@@ -381,7 +446,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--phone",
         default=env("CAMERA_SIGN_PHONE") or None,
         metavar="SERIAL",
-        help="also watch the cameras of this adb device (serial, or host:port over Wi-Fi)",
+        help="also watch the cameras of this adb device (serial, host:port over Wi-Fi,"
+        " or mdns:serial to find its wireless debugging over mDNS)",
     )
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between checks")
     parser.add_argument(
@@ -425,7 +491,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     plug = Plug(args.host, args.username, args.password)
     if args.command == "watch":
+        # Separate notifiers, so a phone notice never replaces a plug one.
         notify_plug_changes(plug, Notifier())
+        if phone is not None:
+            notify_phone_changes(phone, Notifier())
         asyncio.run(watch(args, plug, phone))
         return 0
     return asyncio.run(switch(plug, args.command == "on"))

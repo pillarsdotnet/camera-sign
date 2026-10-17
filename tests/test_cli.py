@@ -138,6 +138,44 @@ def test_wifi_phone_is_reconnected(tmp_path, monkeypatch):
     assert len(calls) == 3
 
 
+AVAHI_DUMP = """\
++;wlp3s0;IPv4;adb-SERIAL-xYz12;_adb-tls-connect._tcp;local
+=;wlp3s0;IPv6;adb-SERIAL-xYz12;_adb-tls-connect._tcp;local;Android.local;fe80::1;40779;"name=Pixel"
+=;wlp3s0;IPv4;adb-OTHER-aBc34;_adb-tls-connect._tcp;local;Other.local;10.0.0.7;33333;"name=Other"
+=;wlp3s0;IPv4;adb-SERIAL-xYz12;_adb-tls-connect._tcp;local;Android.local;10.0.0.9;40779;"name=Pixel"
+"""
+
+
+def fake_avahi_browse(tmp_path, dump):
+    browse = tmp_path / "avahi-browse"
+    browse.write_text(f'#!/bin/sh\ncat <<"EOF"\n{dump}EOF\n')
+    browse.chmod(0o755)
+
+
+def test_mdns_phone_is_discovered(tmp_path, monkeypatch):
+    dump = tmp_path / "dump"
+    dump.write_text(OPEN_DUMP)
+    log = tmp_path / "log"
+    fake_adb(tmp_path, monkeypatch, f'echo adb "$@" >> {log}; [ "$1" = connect ] || cat {dump}\n')
+    fake_avahi_browse(tmp_path, AVAHI_DUMP)
+    assert asyncio.run(Phone("mdns:SERIAL").in_use()) is True
+    assert log.read_text().splitlines() == [
+        "adb connect 10.0.0.9:40779",
+        "adb -s 10.0.0.9:40779 shell dumpsys media.camera",
+    ]
+
+
+def test_mdns_phone_absent_counts_as_idle(tmp_path, monkeypatch, caplog):
+    fake_adb(tmp_path, monkeypatch, "exit 1\n")
+    fake_avahi_browse(tmp_path, "")
+    phone = Phone("mdns:SERIAL")
+    assert asyncio.run(phone.in_use()) is False
+    assert asyncio.run(phone.in_use()) is False
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "not advertised" in warnings[0].getMessage()
+
+
 def test_phone_switch(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     assert cli.phone_enabled()
@@ -217,6 +255,50 @@ def test_plug_reports_each_change_once(monkeypatch):
 
     asyncio.run(flap())
     assert changes == ["Timed out getting discovery response for 10.0.0.9", None]
+
+
+def test_phone_reports_each_change_once(tmp_path, monkeypatch):
+    down = tmp_path / "down"
+    dump = tmp_path / "dump"
+    dump.write_text(IDLE_DUMP)
+    fake_adb(tmp_path, monkeypatch, f"[ -e {down} ] && exit 1; cat {dump}\n")
+    changes = []
+
+    async def on_change(error):
+        changes.append(error)
+
+    async def flap():
+        phone = Phone("SERIAL", on_change)
+        assert await phone.in_use() is False
+        down.touch()
+        assert await phone.in_use() is False
+        assert await phone.in_use() is False
+        down.unlink()
+        assert await phone.in_use() is False
+
+    asyncio.run(flap())
+    assert changes == ["adb exited 1", None]
+
+
+def test_phone_change_notifications():
+    shown = []
+
+    class FakeNotifier:
+        async def show(self, summary, body="", urgent=False):
+            shown.append((summary, urgent))
+
+    phone = Phone("10.0.0.9:5555")
+    cli.notify_phone_changes(phone, FakeNotifier())
+
+    async def flap():
+        await phone.on_change("timed out")
+        await phone.on_change(None)
+
+    asyncio.run(flap())
+    assert shown == [
+        ("On-air sign phone is not answering", True),
+        ("On-air sign phone is back", False),
+    ]
 
 
 def test_plug_change_notifications(monkeypatch):
