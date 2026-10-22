@@ -27,9 +27,13 @@ import sys
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from dbus_fast import BusType
 from dbus_fast.aio import MessageBus
+
+if TYPE_CHECKING:
+    from dbus_fast.aio.proxy_object import ProxyInterface
 from kasa import Device, Discover, KasaException
 
 from camera_sign import __version__
@@ -66,7 +70,7 @@ def phone_enabled() -> bool:
     return not phone_off_flag().exists()
 
 
-def set_phone_enabled(on: bool) -> None:
+def set_phone_enabled(*, on: bool) -> None:
     """Resume or pause watching the phone, for every watcher of this user."""
     flag = phone_off_flag()
     if on:
@@ -84,7 +88,8 @@ def phone_cameras_open(dump: str) -> bool:
     """
     _, found, rest = dump.partition("Active Camera Clients:")
     if not found:
-        raise ValueError("no camera client list in dumpsys output")
+        msg = "no camera client list in dumpsys output"
+        raise ValueError(msg)
     clients, _, _ = rest.partition("Allowed user IDs:")
     return "(Camera ID:" in clients
 
@@ -110,7 +115,8 @@ class Phone:
         self,
         serial: str,
         on_change: Callable[[str | None], Awaitable[None]] | None = None,
-    ):
+    ) -> None:
+        """Remember the serial; nothing is contacted until the first check."""
         self.serial = serial
         self.on_change = on_change
         self._mdns = serial.removeprefix(MDNS_PREFIX) if serial.startswith(MDNS_PREFIX) else None
@@ -161,12 +167,21 @@ class Phone:
 
     def _start_reconnect(self) -> None:
         now = time.monotonic()
-        if ":" not in self.serial or self._reconnect is not None and not self._reconnect.done():
+        if ":" not in self.serial or (self._reconnect is not None and not self._reconnect.done()):
             return
         if now - self._last_reconnect < RECONNECT_EVERY:
             return
         self._last_reconnect = now
         self._reconnect = asyncio.create_task(self._connect())
+
+    async def _dump_cameras(self) -> str:
+        """Return the phone's camera service dump, connecting first if need be."""
+        if self._target is None and not self._failing:
+            await self._connect()  # the first look for the phone waits for mDNS
+        if self._target is None:
+            msg = "wireless debugging is not advertised on the network"
+            raise OSError(msg)
+        return await self._adb("-s", self._target, "shell", "dumpsys", "media.camera")
 
     async def in_use(self) -> bool:
         """Return whether any app on the phone has a camera open.
@@ -174,13 +189,7 @@ class Phone:
         An unreachable phone counts as idle, so the webcam still works alone.
         """
         try:
-            if self._target is None and not self._failing:
-                await self._connect()  # the first look for the phone waits for mDNS
-            if self._target is None:
-                raise OSError("wireless debugging is not advertised on the network")
-            busy = phone_cameras_open(
-                await self._adb("-s", self._target, "shell", "dumpsys", "media.camera")
-            )
+            busy = phone_cameras_open(await self._dump_cameras())
         except (OSError, TimeoutError, ValueError) as exc:
             # Warn once per outage rather than on every check.
             level = logging.DEBUG if self._failing else logging.WARNING
@@ -214,7 +223,8 @@ class Plug:
         username: str | None,
         password: str | None,
         on_change: Callable[[str | None], Awaitable[None]] | None = None,
-    ):
+    ) -> None:
+        """Remember the address and login; the plug is contacted on demand."""
         self.host = host
         self.username = username
         self.password = password
@@ -228,7 +238,8 @@ class Plug:
                 self.host, username=self.username, password=self.password
             )
             if device is None:
-                raise KasaException(f"no Kasa device answered at {self.host}")
+                msg = f"no Kasa device answered at {self.host}"
+                raise KasaException(msg)
             try:
                 await device.update()
             except BaseException:
@@ -246,7 +257,7 @@ class Plug:
                 await self._device.disconnect()
             self._device = None
 
-    async def set(self, on: bool) -> bool:
+    async def set(self, *, on: bool) -> bool:
         """Switch the plug; return whether it worked."""
         try:
             device = await self._connect()
@@ -254,7 +265,7 @@ class Plug:
         except PLUG_ERRORS as exc:
             # Warn once per outage rather than on every retry.
             level = logging.DEBUG if self._failing else logging.WARNING
-            log.log(level, "could not switch %s %s: %s", self.host, _word(on), exc)
+            log.log(level, "could not switch %s %s: %s", self.host, _word(on=on), exc)
             await self.close()
             if not self._failing:
                 self._failing = True
@@ -277,9 +288,10 @@ class SleepGuard:
     released.  The lock is taken again on resume.
     """
 
-    def __init__(self, before_sleep: Callable[[], Awaitable[None]]):
+    def __init__(self, before_sleep: Callable[[], Awaitable[None]]) -> None:
+        """Remember the callback; the lock is taken by `start`."""
         self.before_sleep = before_sleep
-        self._manager = None
+        self._manager: ProxyInterface | None = None  # set by start()
         self._fd: int | None = None
         self._tasks: set[asyncio.Task] = set()
 
@@ -294,16 +306,17 @@ class SleepGuard:
         await self._lock()
 
     async def _lock(self) -> None:
-        self._fd = await self._manager.call_inhibit(
+        # start() connects before the first lock, so _manager is never None here.
+        self._fd = await self._manager.call_inhibit(  # type: ignore[union-attr]
             "sleep", "camera-sign", "Switch the on-air sign off", "delay"
         )
 
-    def _on_prepare_for_sleep(self, going_down: bool) -> None:
-        task = asyncio.create_task(self._handle(going_down))
+    def _on_prepare_for_sleep(self, going_down: bool) -> None:  # noqa: FBT001 -- signature set by the logind signal
+        task = asyncio.create_task(self._handle(going_down=going_down))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
-    async def _handle(self, going_down: bool) -> None:
+    async def _handle(self, *, going_down: bool) -> None:
         if going_down:
             try:
                 await self.before_sleep()
@@ -315,7 +328,7 @@ class SleepGuard:
             await self._lock()
 
 
-def _word(on: bool) -> str:
+def _word(*, on: bool) -> str:
     return "on" if on else "off"
 
 
@@ -363,7 +376,9 @@ async def any_camera_in_use(phone: Phone | None) -> bool:
     return phone is not None and phone_enabled() and await phone.in_use()
 
 
-async def watch(args: argparse.Namespace, plug: Plug, phone: Phone | None = None) -> None:
+async def watch(  # noqa: C901 -- one cohesive loop reads better than pieces split to meet the limit
+    args: argparse.Namespace, plug: Plug, phone: Phone | None = None
+) -> None:
     """Keep the plug in step with the camera until told to stop."""
     debouncer = Debouncer(on_delay=args.on_delay, off_delay=args.off_delay)
     stop = asyncio.Event()
@@ -374,11 +389,11 @@ async def watch(args: argparse.Namespace, plug: Plug, phone: Phone | None = None
     sent: bool | None = None  # what the plug was last told, if it heard
     last_sent = 0.0
 
-    async def send(on: bool) -> None:
+    async def send(*, on: bool) -> None:
         nonlocal sent, last_sent
-        if await plug.set(on):
+        if await plug.set(on=on):
             if on != sent:
-                log.info("sign %s", _word(on))
+                log.info("sign %s", _word(on=on))
             sent, last_sent = on, time.monotonic()
         else:
             sent = None
@@ -386,7 +401,7 @@ async def watch(args: argparse.Namespace, plug: Plug, phone: Phone | None = None
     async def before_sleep() -> None:
         log.info("suspending")
         debouncer.lit = False
-        await send(False)
+        await send(on=False)
 
     try:
         await SleepGuard(before_sleep).start()
@@ -403,22 +418,22 @@ async def watch(args: argparse.Namespace, plug: Plug, phone: Phone | None = None
                 log.info("not watching phone %s: switched off with camera-sign phone", phone.serial)
         in_use = await any_camera_in_use(phone)
         now = time.monotonic()
-        want = debouncer.update(in_use, now)
+        want = debouncer.update(in_use=in_use, now=now)
         # Tell the plug again now and then, in case someone pressed its button
         # or it lost power; a failed send is retried on the next tick.
         if want != sent or now - last_sent >= args.refresh:
-            await send(want)
+            await send(on=want)
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), args.interval)
 
     log.info("stopping")
-    await send(False)
+    await send(on=False)
     await plug.close()
 
 
-async def switch(plug: Plug, on: bool) -> int:
+async def switch(plug: Plug, *, on: bool) -> int:
     """Switch the plug once, for testing it by hand."""
-    ok = await plug.set(on)
+    ok = await plug.set(on=on)
     await plug.close()
     return 0 if ok else 1
 
@@ -482,12 +497,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "phone":
         if args.setting is not None:
-            set_phone_enabled(args.setting == "on")
-        print(f"watching the phone: {_word(phone_enabled())}")
+            set_phone_enabled(on=args.setting == "on")
+        # Intentional command-line output, not stray debugging.
+        print(f"watching the phone: {_word(on=phone_enabled())}")  # noqa: T201
         return 0
     phone = Phone(args.phone) if args.phone else None
     if args.command == "status":
-        print("camera in use" if asyncio.run(any_camera_in_use(phone)) else "camera idle")
+        # Intentional command-line output, not stray debugging.
+        print("camera in use" if asyncio.run(any_camera_in_use(phone)) else "camera idle")  # noqa: T201
         return 0
     plug = Plug(args.host, args.username, args.password)
     if args.command == "watch":
@@ -497,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
             notify_phone_changes(phone, Notifier())
         asyncio.run(watch(args, plug, phone))
         return 0
-    return asyncio.run(switch(plug, args.command == "on"))
+    return asyncio.run(switch(plug, on=args.command == "on"))
 
 
 if __name__ == "__main__":

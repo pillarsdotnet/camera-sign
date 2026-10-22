@@ -20,7 +20,7 @@ class Debouncer:
     lit: bool = False
     _since: float | None = field(default=None, repr=False)
 
-    def update(self, in_use: bool, now: float) -> bool:
+    def update(self, *, in_use: bool, now: float) -> bool:
         """Record one sample taken at monotonic time `now`; return the decision."""
         if in_use == self.lit:
             self._since = None

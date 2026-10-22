@@ -23,13 +23,14 @@ log = logging.getLogger("camera-sign")
 class Notifier:
     """Post notifications, best effort: a missing desktop is logged, not raised."""
 
-    def __init__(self, app_name: str = "camera-sign"):
+    def __init__(self, app_name: str = "camera-sign") -> None:
+        """Remember the app name; the bus is connected on the first show."""
         self.app_name = app_name
         self._bus: MessageBus | None = None
         self._last_id = 0
         self._failing = False
 
-    async def _call(self, summary: str, body: str, urgent: bool) -> int:
+    async def _call(self, summary: str, body: str, *, urgent: bool) -> int:
         if self._bus is None or not self._bus.connected:
             self._bus = await MessageBus().connect()
         urgency = URGENCY_CRITICAL if urgent else URGENCY_NORMAL
@@ -53,14 +54,15 @@ class Notifier:
             )
         )
         if reply.message_type == MessageType.ERROR:
-            raise OSError(f"{reply.error_name}: {reply.body}")
+            msg = f"{reply.error_name}: {reply.body}"
+            raise OSError(msg)
         return reply.body[0]
 
-    async def show(self, summary: str, body: str = "", urgent: bool = False) -> None:
+    async def show(self, summary: str, body: str = "", *, urgent: bool = False) -> None:
         """Show a notification in place of the last one."""
         try:
             self._last_id = await asyncio.wait_for(
-                self._call(summary, body, urgent), NOTIFY_TIMEOUT
+                self._call(summary, body, urgent=urgent), NOTIFY_TIMEOUT
             )
         except Exception as exc:  # noqa: BLE001 -- best effort, the watcher still works
             # Warn once per outage rather than on every notification.

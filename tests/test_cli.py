@@ -40,7 +40,8 @@ class RefusingDevice:
         self.disconnected = False
 
     async def update(self):
-        raise AuthenticationError("Device response did not match our challenge")
+        msg = "Device response did not match our challenge"
+        raise AuthenticationError(msg)
 
     async def disconnect(self):
         self.disconnected = True
@@ -49,11 +50,11 @@ class RefusingDevice:
 def test_failed_login_releases_the_session(monkeypatch):
     device = RefusingDevice()
 
-    async def discover_single(host, **kwargs):
+    async def discover_single(_host, **_kwargs):
         return device
 
     monkeypatch.setattr(cli.Discover, "discover_single", discover_single)
-    assert asyncio.run(Plug("10.0.0.9", "user", "wrong").set(True)) is False
+    assert asyncio.run(Plug("10.0.0.9", "user", "wrong").set(on=True)) is False
     assert device.disconnected
 
 
@@ -78,7 +79,7 @@ Allowed user IDs: 0
 def test_phone_cameras_open():
     assert phone_cameras_open(IDLE_DUMP) is False
     assert phone_cameras_open(OPEN_DUMP) is True
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="no camera client list"):
         phone_cameras_open("adb: device offline")
 
 
@@ -207,7 +208,7 @@ def test_switched_off_phone_is_not_asked(tmp_path, monkeypatch):
             return True
 
     assert asyncio.run(cli.any_camera_in_use(BusyPhone())) is True
-    cli.set_phone_enabled(False)
+    cli.set_phone_enabled(on=False)
     assert asyncio.run(cli.any_camera_in_use(BusyPhone())) is False
 
 
@@ -221,7 +222,8 @@ class FlakyDevice:
 
     async def turn_on(self):
         if not self.answering:
-            raise TimeoutError("Timed out getting discovery response for 10.0.0.9")
+            msg = "Timed out getting discovery response for 10.0.0.9"
+            raise TimeoutError(msg)
 
     turn_off = turn_on
 
@@ -232,9 +234,10 @@ class FlakyDevice:
 def test_plug_reports_each_change_once(monkeypatch):
     device = FlakyDevice()
 
-    async def discover_single(host, **kwargs):
+    async def discover_single(_host, **_kwargs):
         if not device.answering:
-            raise TimeoutError("Timed out getting discovery response for 10.0.0.9")
+            msg = "Timed out getting discovery response for 10.0.0.9"
+            raise TimeoutError(msg)
         return device
 
     monkeypatch.setattr(cli.Discover, "discover_single", discover_single)
@@ -245,13 +248,13 @@ def test_plug_reports_each_change_once(monkeypatch):
 
     async def flap():
         plug = Plug("10.0.0.9", None, None, on_change)
-        assert await plug.set(True)
+        assert await plug.set(on=True)
         device.answering = False
-        assert not await plug.set(True)
-        assert not await plug.set(True)
+        assert not await plug.set(on=True)
+        assert not await plug.set(on=True)
         device.answering = True
-        assert await plug.set(True)
-        assert await plug.set(True)
+        assert await plug.set(on=True)
+        assert await plug.set(on=True)
 
     asyncio.run(flap())
     assert changes == ["Timed out getting discovery response for 10.0.0.9", None]
@@ -284,7 +287,7 @@ def test_phone_change_notifications():
     shown = []
 
     class FakeNotifier:
-        async def show(self, summary, body="", urgent=False):
+        async def show(self, summary, _body="", *, urgent=False):
             shown.append((summary, urgent))
 
     phone = Phone("10.0.0.9:5555")
@@ -301,11 +304,11 @@ def test_phone_change_notifications():
     ]
 
 
-def test_plug_change_notifications(monkeypatch):
+def test_plug_change_notifications():
     shown = []
 
     class FakeNotifier:
-        async def show(self, summary, body="", urgent=False):
+        async def show(self, summary, _body="", *, urgent=False):
             shown.append((summary, urgent))
 
     plug = Plug("10.0.0.9", None, None)
