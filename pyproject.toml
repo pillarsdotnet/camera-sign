@@ -32,8 +32,35 @@ build-backend = "hatchling.build"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "BLE", "D"]
-ignore = ["D105", "D107", "D203", "D213"]
+# Enable the entire Ruff rule set; suppress only mutually-incompatible rules.
+select = ["ALL"]
+ignore = [
+  "D203",   # conflicts with D211 — keep D211 (no blank line before class docstring)
+  "D213",   # conflicts with D212 — keep D212 (summary on first line)
+  "COM812", # conflicts with the ruff formatter, which owns trailing commas
+  "ISC001", # conflicts with the ruff formatter, which owns implicit concatenation
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["D"]
+"tests/*" = [
+  "D",       # test names say what they test; docstrings would repeat them
+  "INP001",  # pytest finds tests by path; the directory is not a package
+  "S101",    # pytest tests assert
+  "PLR2004", # expected values in assertions read clearer bare
+  "ANN",     # test signatures are fixtures-in, None-out
+  "SLF001",  # tests reach the watcher's private reconnect task to await it
+]
+
+[tool.mypy]
+# Pin the target so mypy checks the language level we actually support
+# (requires-python) instead of whatever interpreter happens to run the hook.
+python_version = "3.11"
+files = ["src"]
+ignore_missing_imports = false
+warn_unused_ignores = true
+
+# kasa and dbus_fast are not installed into the pre-commit mypy hook's
+# isolated environment, so don't fail on their missing stubs.
+[[tool.mypy.overrides]]
+module = ["kasa", "kasa.*", "dbus_fast", "dbus_fast.*"]
+ignore_missing_imports = true
