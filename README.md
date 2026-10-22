@@ -105,12 +105,18 @@ the server restarts, so while one is not answering the watcher runs
 ## Install
 
 On Ubuntu 24.04 (`noble`), 26.04 (`resolute`) or 26.10 (`stonking`), the
-Debian package in
-[`ppa:pillarsdotnet/ppa`](https://launchpad.net/~pillarsdotnet/+archive/ubuntu/ppa)
-brings the `python3-kasa` it needs from the same PPA too:
+Debian package in the
+[package registry](https://forgejo.bobbalisa.org/pillarsdotnet/-/packages) on
+`forgejo.bobbalisa.org` brings the `python3-kasa` it needs from the same
+registry too:
 
 ```sh
-sudo add-apt-repository ppa:pillarsdotnet/ppa
+sudo install -d /etc/apt/keyrings
+curl -fsS https://forgejo.bobbalisa.org/api/packages/pillarsdotnet/debian/repository.key |
+  sudo tee /etc/apt/keyrings/forgejo-bobbalisa.asc > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/forgejo-bobbalisa.asc] https://forgejo.bobbalisa.org/api/packages/pillarsdotnet/debian $(lsb_release -cs) main" |
+  sudo tee /etc/apt/sources.list.d/forgejo-bobbalisa.list > /dev/null
+sudo apt update
 sudo apt install camera-sign
 ```
 
