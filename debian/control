@@ -13,7 +13,7 @@ Build-Depends:
  python3-pytest <!nocheck>,
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
-Homepage: https://github.com/pillarsdotnet/camera-sign
+Homepage: https://forgejo.bobbalisa.org/pillarsdotnet/camera-sign
 
 Package: camera-sign
 Architecture: all
