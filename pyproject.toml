@@ -59,8 +59,9 @@ files = ["src"]
 ignore_missing_imports = false
 warn_unused_ignores = true
 
-# kasa and dbus_fast are not installed into the pre-commit mypy hook's
-# isolated environment, so don't fail on their missing stubs.
+# kasa is not installed into the pre-commit mypy hook's isolated
+# environment (it is pinned to a git commit), so don't fail on its
+# missing stubs. dbus_fast is installed there, so it is checked for real.
 [[tool.mypy.overrides]]
-module = ["kasa", "kasa.*", "dbus_fast", "dbus_fast.*"]
+module = ["kasa", "kasa.*"]
 ignore_missing_imports = true

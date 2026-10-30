@@ -41,9 +41,12 @@ repos:
     hooks:
       - id: mypy
         files: ^src/
-        # kasa and dbus_fast are not installed into the hook's isolated
-        # environment; [[tool.mypy.overrides]] in pyproject.toml ignores
-        # their missing stubs, the way make_fillable does for cv2.
+        # dbus_fast is installed into the hook's isolated environment so the
+        # hook checks the same types a full checkout does. kasa is not (it is
+        # pinned to a git commit); [[tool.mypy.overrides]] in pyproject.toml
+        # ignores its missing stubs, the way make_fillable does for cv2.
+        additional_dependencies:
+          - "dbus-fast>=2.0"
 
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.35.1

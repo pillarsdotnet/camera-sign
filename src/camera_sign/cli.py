@@ -302,7 +302,8 @@ class SleepGuard:
         introspection = await bus.introspect("org.freedesktop.login1", path)
         proxy = bus.get_proxy_object("org.freedesktop.login1", path, introspection)
         self._manager = proxy.get_interface("org.freedesktop.login1.Manager")
-        self._manager.on_prepare_for_sleep(self._on_prepare_for_sleep)
+        # dbus_fast adds on_<signal> methods at runtime, from introspection.
+        self._manager.on_prepare_for_sleep(self._on_prepare_for_sleep)  # type: ignore[attr-defined]
         await self._lock()
 
     async def _lock(self) -> None:
