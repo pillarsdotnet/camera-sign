@@ -9,7 +9,7 @@ Build-Depends:
  python3-all,
  python3-hatchling,
  python3-dbus-fast <!nocheck>,
- python3-kasa (>= 0.10.2+git20260930.998ebe7) <!nocheck>,
+ python3-kasa (>= 0.12.0) <!nocheck>,
  python3-pytest <!nocheck>,
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
@@ -18,7 +18,7 @@ Homepage: https://forgejo.bobbalisa.org/pillarsdotnet/camera-sign
 Package: camera-sign
 Architecture: all
 Depends:
- python3-kasa (>= 0.10.2+git20260930.998ebe7),
+ python3-kasa (>= 0.12.0),
  ${misc:Depends},
  ${python3:Depends},
 Suggests:

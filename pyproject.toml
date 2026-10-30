@@ -10,9 +10,9 @@ authors = [{ name = "Robert August Vincent II", email = "pillarsdotnet@gmail.com
 requires-python = ">=3.11"
 dependencies = [
   "dbus-fast>=2.0",
-  # Unreleased fix: EP10 firmware 1.1.x logs in with KLAP v2 (python-kasa PR 1731).
-  # Return to a version range once a release after 0.10.2 includes it.
-  "python-kasa @ git+https://github.com/python-kasa/python-kasa@998ebe79e825d4e1f25013037b7b33fd0569bf6b",
+  # 0.12.0 is the first release where EP10 firmware 1.1.x logs in with
+  # KLAP v2 (python-kasa PR 1731), which used to need a git pin.
+  "python-kasa>=0.12.0",
 ]
 
 [project.scripts]
@@ -20,9 +20,6 @@ camera-sign = "camera_sign.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]

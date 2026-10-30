@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 
 [[package]]
@@ -181,7 +181,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dbus-fast", specifier = ">=2.0" },
-    { name = "python-kasa", git = "https://github.com/python-kasa/python-kasa?rev=998ebe79e825d4e1f25013037b7b33fd0569bf6b" },
+    { name = "python-kasa", specifier = ">=0.12.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -872,14 +872,18 @@ wheels = [
 
 [[package]]
 name = "python-kasa"
-version = "0.10.2"
-source = { git = "https://github.com/python-kasa/python-kasa?rev=998ebe79e825d4e1f25013037b7b33fd0569bf6b#998ebe79e825d4e1f25013037b7b33fd0569bf6b" }
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "asyncclick" },
     { name = "cryptography" },
     { name = "mashumaro" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/d6/e3ab366aa362ff4a12d5166ed648667cfe394dc2c1b450eab41bda310be8/python_kasa-0.12.0.tar.gz", hash = "sha256:92b0cd9eafc89a07a31e5652dd494a2eed0477fc1b0e517ba1b1a045d2cf3643", size = 537631, upload-time = "2026-10-25T19:37:08.479Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/65/2045880563c419c0577da4311422218ca11858a891cf89b81c7079fc2e50/python_kasa-0.12.0-py3-none-any.whl", hash = "sha256:e18adb340f359750bc5e798aa1856cdc1a28bc9307d510ad6556998545f40bbd", size = 277243, upload-time = "2026-10-25T19:37:06.57Z" },
 ]
 
 [[package]]
