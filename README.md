@@ -144,9 +144,11 @@ Elsewhere, install it with `uv`:
    curl -fsSL https://raw.githubusercontent.com/pillarsdotnet/camera-sign/main/systemd/env.example \
      > ~/.config/camera-sign/env
    $EDITOR ~/.config/camera-sign/env
-   set -a; . ~/.config/camera-sign/env; set +a
    camera-sign on && sleep 3 && camera-sign off
    ```
+
+   The command reads that file by itself, so nothing needs sourcing;
+   variables already in the environment override it.
 
    Newer `Kasa` firmware refuses local commands without the TP-Link account
    the plug was set up with. If `camera-sign on` fails with an authentication

@@ -18,9 +18,9 @@ unit for nobody. To use it:
    plug was set up with; "camera-sign on" fails with an authentication error
    without them.
 
-3. Check it, then start the service:
+3. Check it, then start the service (the command reads that env file by
+   itself; variables already in the environment override it):
 
-     set -a; . ~/.config/camera-sign/env; set +a
      camera-sign on && sleep 3 && camera-sign off
      systemctl --user enable --now camera-sign
      journalctl --user -u camera-sign -f

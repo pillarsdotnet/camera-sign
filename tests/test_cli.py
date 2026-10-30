@@ -9,6 +9,13 @@ from camera_sign import cli
 from camera_sign.cli import Phone, Plug, camera_in_use, parse_args, phone_cameras_open
 
 
+@pytest.fixture(autouse=True)
+def isolated_config(tmp_path, monkeypatch):
+    # parse_args reads ~/.config/camera-sign/env; keep the developer's own
+    # settings out of every test.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+
 def test_camera_in_use(tmp_path):
     refcnt = tmp_path / "refcnt"
     refcnt.write_text("0\n")
@@ -31,6 +38,30 @@ def test_host_required(monkeypatch):
     with pytest.raises(SystemExit):
         parse_args(["watch"])
     assert parse_args(["status"]).command == "status"
+
+
+def test_host_from_env_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("CAMERA_SIGN_HOST", raising=False)
+    conf = tmp_path / "camera-sign"
+    conf.mkdir()
+    (conf / "env").write_text(
+        "# a comment\n"
+        "CAMERA_SIGN_HOST=10.0.0.8\n"
+        "#CAMERA_SIGN_PHONE=192.168.1.51:5555\n"
+        'CAMERA_SIGN_PASSWORD="hush hush"\n'
+    )
+    args = parse_args([])
+    assert args.host == "10.0.0.8"
+    assert args.password == "hush hush"  # noqa: S105 -- a quoting example, not a secret
+    assert args.phone is None  # commented out, so not read
+
+
+def test_environment_overrides_env_file(tmp_path, monkeypatch):
+    conf = tmp_path / "camera-sign"
+    conf.mkdir()
+    (conf / "env").write_text("CAMERA_SIGN_HOST=10.0.0.8\n")
+    monkeypatch.setenv("CAMERA_SIGN_HOST", "10.0.0.9")
+    assert parse_args([]).host == "10.0.0.9"
 
 
 class RefusingDevice:

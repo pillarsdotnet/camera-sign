@@ -439,9 +439,42 @@ async def switch(plug: Plug, *, on: bool) -> int:
     return 0 if ok else 1
 
 
+def config_env_file() -> Path:
+    """Return the settings file the service reads through `EnvironmentFile=`."""
+    config = os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config"
+    return Path(config) / "camera-sign" / "env"
+
+
+def load_env_file(path: Path | None = None) -> dict[str, str]:
+    """Read the `CAMERA_SIGN_*` settings from the service's env file.
+
+    Run by hand, the command sees the same settings the service gets from
+    `EnvironmentFile=`, so `camera-sign on` works without sourcing the
+    file first.  Variables already in the environment still win.
+    """
+    values: dict[str, str] = {}
+    try:
+        text = (path or config_env_file()).read_text()
+    except OSError:
+        return values
+    for raw in text.splitlines():
+        line = raw.strip()
+        key, sep, value = line.partition("=")
+        key = key.strip()
+        if line.startswith("#") or not sep or not key.startswith("CAMERA_SIGN_"):
+            continue
+        value = value.strip()
+        if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Read options, falling back to `CAMERA_SIGN_*` environment variables."""
-    env = os.environ.get
+    """Read options, falling back to `CAMERA_SIGN_*` variables and the env file."""
+    settings = load_env_file()
+    settings |= {k: v for k, v in os.environ.items() if k.startswith("CAMERA_SIGN_")}
+    env = settings.get
     parser = argparse.ArgumentParser(prog="camera-sign", description=__doc__.splitlines()[0])
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument(
