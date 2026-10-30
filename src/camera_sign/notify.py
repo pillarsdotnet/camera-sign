@@ -5,6 +5,13 @@
 Each notification replaces the one before it, so the screen shows only
 the latest news.  An urgent one stays up until it is dismissed, on
 desktops that honour the urgency hint.
+
+The notification server can be slow to answer -- at login it may still
+be starting -- so a show waits for it only briefly and then carries on,
+while the call runs to completion in the background.  Shows are chained,
+each waiting for the reply to the one before, so even a late reply
+yields the id on screen and the next notification replaces that one
+instead of piling up beside it.
 """
 
 import asyncio
@@ -13,7 +20,8 @@ import logging
 from dbus_fast import Message, MessageType, Variant
 from dbus_fast.aio import MessageBus
 
-NOTIFY_TIMEOUT = 2.0
+SHOW_WAIT = 2.0  # how long show() waits for the server before carrying on
+REPLY_TIMEOUT = 30.0  # how long a call may go on waiting in the background
 URGENCY_NORMAL = 1
 URGENCY_CRITICAL = 2
 
@@ -29,6 +37,7 @@ class Notifier:
         self._bus: MessageBus | None = None
         self._last_id = 0
         self._failing = False
+        self._chain: asyncio.Task | None = None
 
     async def _call(self, summary: str, body: str, *, urgent: bool) -> int:
         if self._bus is None or not self._bus.connected:
@@ -58,19 +67,31 @@ class Notifier:
             raise OSError(msg)
         return reply.body[0]
 
-    async def show(self, summary: str, body: str = "", *, urgent: bool = False) -> None:
-        """Show a notification in place of the last one."""
+    async def _show(
+        self, prev: asyncio.Task | None, summary: str, body: str, *, urgent: bool
+    ) -> None:
+        if prev is not None:
+            # Wait for the last reply, however late, so _last_id names
+            # the notification on screen and this one replaces it.
+            await asyncio.wait({prev})
         try:
             self._last_id = await asyncio.wait_for(
-                self._call(summary, body, urgent=urgent), NOTIFY_TIMEOUT
+                self._call(summary, body, urgent=urgent), REPLY_TIMEOUT
             )
         except Exception as exc:  # noqa: BLE001 -- best effort, the watcher still works
             # Warn once per outage rather than on every notification.
             level = logging.DEBUG if self._failing else logging.WARNING
-            log.log(level, "cannot show a notification: %s", exc)
+            log.log(level, "cannot show a notification: %s", str(exc) or type(exc).__name__)
             self._failing = True
             if self._bus is not None:
                 self._bus.disconnect()
                 self._bus = None
             return
         self._failing = False
+
+    async def show(self, summary: str, body: str = "", *, urgent: bool = False) -> None:
+        """Show a notification in place of the last one, waiting only briefly."""
+        self._chain = task = asyncio.create_task(
+            self._show(self._chain, summary, body, urgent=urgent)
+        )
+        await asyncio.wait({task}, timeout=SHOW_WAIT)
