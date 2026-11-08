@@ -102,6 +102,19 @@ raises the notification, and coming home clears it. The `adb` server forgets a W
 the server restarts, so while one is not answering the watcher runs
 `adb connect` again every 30 seconds, without holding up the webcam check.
 
+One cause of an outage the watcher can put right, and so offers to: the
+phone dropping this machine's key. While the phone is still advertising
+wireless debugging but `adb` is refused, the notification carries a
+**Re-pair** button. Pressing it puts the phone-side steps on screen, waits
+for the six-digit code the phone shows, pairs with it, and dismisses the
+alert; the sign follows the phone's camera again on the next check. The
+button needs `kdialog` or `zenity` for the box the code is typed into.
+
+The button appears only for that failure. A phone that is simply out of the
+house advertises nothing over mDNS, so there is nothing to pair with and no
+button is offered -- see
+[When the phone drops the key](#when-the-phone-drops-the-key).
+
 ## Install
 
 On Ubuntu 24.04 (`noble`), 26.04 (`resolute`) or 26.10 (`stonking`), the
@@ -167,7 +180,8 @@ Elsewhere, install it with `uv`:
 ## Watching a phone too
 
 This needs `adb` (`sudo apt install adb`) and a phone running Android 11
-or later.
+or later. Over wireless debugging it also needs `avahi-utils`, to find the
+phone, and `kdialog` or `zenity` for the Re-pair button.
 
 1. Turn on USB debugging on the phone: Settings → About phone → tap Build
    number seven times, then Settings → System → Developer options → USB
@@ -217,9 +231,15 @@ turns wireless debugging off at every restart too**, along with its port
 number, but turning it _back_ on needs only a tap on the phone -- no cable.
 
 1. On the phone, turn on Settings → System → Developer options → Wireless
-   debugging. A laptop the phone already trusts over USB debugging needs no
-   pairing; a fresh one pairs once with `adb pair`, from the Pair device
-   with pairing code button in the same screen.
+   debugging. Pair once with `adb pair`, from the Pair device with pairing
+   code button in the same screen.
+
+   Wireless debugging keeps its own trust store, separate from the one USB
+   debugging uses, so trusting this machine over the cable does not carry
+   over to Wi-Fi and a laptop already listed under USB debugging still has
+   to pair. The pairing then lasts across phone restarts, until something
+   clears that store -- see
+   [When the phone drops the key](#when-the-phone-drops-the-key).
 
 2. Wireless debugging listens on a different port after every restart, so a
    fixed `address:port` cannot name it. The watcher finds the current port
@@ -248,6 +268,41 @@ number, but turning it _back_ on needs only a tap on the phone -- no cable.
    toggle goes back on, the phone counts as idle, the desktop notification
    says so, and the webcam still lights the sign.
 
+#### When the phone drops the key
+
+Clearing the phone's wireless-debugging trust store leaves a failure that
+says almost nothing. mDNS still advertises the phone, the port still
+accepts a connection, and `adb connect` reports only `failed to connect`.
+Only the `adb` server's own log names the cause, and only if asked for it:
+
+```sh
+adb kill-server
+ADB_TRACE=all adb server nodaemon 2>&1 | grep -iE 'tls|handshake'
+# [client]: Post-handshake SSL_peek failed [SSLV3_ALERT_CERTIFICATE_UNKNOWN]
+```
+
+`CERTIFICATE_UNKNOWN` is the phone rejecting this machine's certificate.
+Nothing on this side can be changed to recover: the phone has to hand over
+a fresh code. Press **Re-pair** on the notification, or run it by hand:
+
+```sh
+camera-sign pair                      # asks for the code on screen
+camera-sign pair --code 979548        # or give it one already read off the phone
+```
+
+Either way the phone's Pair device with pairing code screen has to be open,
+because the pairing port is advertised only while it is, on a new port
+every time.
+
+Note that Ubuntu's `adb` 34.0.5 crashes on a rejected handshake -- a
+use-after-free in the `adb` server, which the watcher's 30-second reconnect
+loop then trips every 20 to 40 minutes
+([bug 2172431](https://bugs.launchpad.net/ubuntu/+source/android-platform-tools/+bug/2172431)).
+The sign keeps working, since an unreachable phone counts as idle, but the
+journal fills with core dumps until the phone is paired again.
+`google-android-platform-tools-installer`, in `multiverse`, carries a
+newer `adb` that does not crash.
+
 To stop the phone lighting the sign for a while -- say, a video call on it
 from another room -- switch the phone off, and back on afterwards:
 
@@ -270,6 +325,8 @@ camera-sign on|off    switch the sign once
 camera-sign status    say whether the camera is in use
 camera-sign phone [on|off]
                       watch the phone's cameras or not, or say which
+camera-sign pair [--code CODE]
+                      pair the phone's wireless debugging again
 ```
 
 Add `--phone SERIAL` (or set `CAMERA_SIGN_PHONE`) to watch a phone's cameras

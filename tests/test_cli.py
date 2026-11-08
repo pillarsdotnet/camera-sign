@@ -314,25 +314,187 @@ def test_phone_reports_each_change_once(tmp_path, monkeypatch):
     assert changes == ["adb exited 1", None]
 
 
+class FakeNotifier:
+    """Records what reached the screen, and lets a test press a button."""
+
+    def __init__(self):
+        self.shown = []
+        self.offered = []
+        self.closed = 0
+        self._buttons = ()
+
+    async def show(self, summary, body="", *, urgent=False, actions=()):
+        self.shown.append((summary, urgent))
+        self.offered.append([(key, label) for key, label, _ in actions])
+        self.bodies = getattr(self, "bodies", [])
+        self.bodies.append(body)
+        self._buttons = actions
+
+    async def close(self):
+        self.closed += 1
+
+    def press(self, label):
+        """Return the callback behind the button with this label."""
+        for _key, button, callback in self._buttons:
+            if button == label:
+                return callback
+        msg = f"no {label!r} button on screen"
+        raise AssertionError(msg)
+
+
 def test_phone_change_notifications():
-    shown = []
-
-    class FakeNotifier:
-        async def show(self, summary, _body="", *, urgent=False):
-            shown.append((summary, urgent))
-
+    notifier = FakeNotifier()
+    # A phone named by address is not reached over mDNS, so there is
+    # nothing to pair and no button to offer.
     phone = Phone("10.0.0.9:5555")
-    cli.notify_phone_changes(phone, FakeNotifier())
+    cli.notify_phone_changes(phone, notifier)
 
     async def flap():
         await phone.on_change("timed out")
         await phone.on_change(None)
 
     asyncio.run(flap())
-    assert shown == [
+    assert notifier.shown == [
         ("On-air sign phone is not answering", True),
         ("On-air sign phone is back", False),
     ]
+    assert notifier.offered == [[], []]
+
+
+PAIRING_DUMP = (
+    "=;wlp3s0;IPv4;adb-SERIAL-xYz12;_adb-tls-pairing._tcp;local;"
+    'Android.local;10.0.0.9;43039;"name=Pixel"\n'
+)
+
+
+def fake_avahi_by_type(tmp_path, *, connect=AVAHI_DUMP, pairing=PAIRING_DUMP):
+    """Install an avahi-browse that answers per service type.
+
+    fake_avahi_browse above returns one dump whatever is asked for, which
+    cannot serve the pairing flow: it looks up the connect port and then
+    the pairing port, and the two differ.
+    """
+    connect_file = tmp_path / "connect.txt"
+    connect_file.write_text(connect)
+    pairing_file = tmp_path / "pairing.txt"
+    pairing_file.write_text(pairing)
+    browse = tmp_path / "avahi-browse"
+    browse.write_text(
+        "#!/bin/sh\n"
+        "for arg; do last=$arg; done\n"
+        'case "$last" in\n'
+        f"  *pairing*) cat {pairing_file} ;;\n"
+        f"  *) cat {connect_file} ;;\n"
+        "esac\n"
+    )
+    browse.chmod(0o755)
+
+
+def test_repair_button_only_when_the_phone_is_still_advertised(tmp_path, monkeypatch):
+    fake_avahi_browse(tmp_path, AVAHI_DUMP)
+    monkeypatch.setenv("PATH", str(tmp_path), prepend=":")
+    advertised = FakeNotifier()
+    phone = Phone("mdns:SERIAL")
+    cli.notify_phone_changes(phone, advertised)
+    asyncio.run(phone.on_change("failed to connect to 10.0.0.9:40779"))
+    # On the network but refusing adb: a dropped key, which pairing fixes.
+    assert advertised.offered == [[(cli.REPAIR_ACTION, "Re-pair")]]
+
+    # Out of the house: nothing advertised, so nothing to pair with.
+    fake_avahi_browse(tmp_path, "")
+    away = FakeNotifier()
+    gone = Phone("mdns:SERIAL")
+    cli.notify_phone_changes(gone, away)
+    asyncio.run(gone.on_change("wireless debugging is not advertised on the network"))
+    assert away.offered == [[]]
+
+
+def test_repair_button_pairs_and_dismisses_the_alert(tmp_path, monkeypatch):
+    log = tmp_path / "log"
+    fake_avahi_by_type(tmp_path)
+    fake_adb(
+        tmp_path,
+        monkeypatch,
+        f'echo "$@" >> {log}\n'
+        'case "$1" in pair) echo "Successfully paired to $2 [guid=adb-SERIAL]" ;; esac\n',
+    )
+    fake_binary = tmp_path / "kdialog"
+    fake_binary.write_text('#!/bin/sh\necho "979 548"\n')
+    fake_binary.chmod(0o755)
+
+    notifier = FakeNotifier()
+    phone = Phone("mdns:SERIAL")
+    cli.notify_phone_changes(phone, notifier)
+
+    async def fail_then_press():
+        await phone.on_change("failed to connect to 10.0.0.9:40779")
+        await notifier.press("Re-pair")()
+        if phone._reconnect is not None:
+            await phone._reconnect  # the pairing asks for an immediate retry
+
+    asyncio.run(fail_then_press())
+    calls = log.read_text().splitlines()
+    # The pairing port, and the code with the phone's own spacing removed.
+    assert "pair 10.0.0.9:43039 979548" in calls
+    assert notifier.closed == 1  # the alert was dismissed, as asked
+    assert notifier.shown == [("On-air sign phone is not answering", True)]
+
+
+def test_a_cancelled_repair_puts_the_alert_back(tmp_path, monkeypatch):
+    fake_avahi_by_type(tmp_path)
+    fake_adb(tmp_path, monkeypatch, "exit 1\n")
+    cancelled = tmp_path / "kdialog"
+    cancelled.write_text("#!/bin/sh\nexit 1\n")
+    cancelled.chmod(0o755)
+
+    notifier = FakeNotifier()
+    phone = Phone("mdns:SERIAL")
+    cli.notify_phone_changes(phone, notifier)
+
+    async def fail_then_cancel():
+        await phone.on_change("failed to connect to 10.0.0.9:40779")
+        await notifier.press("Re-pair")()
+
+    asyncio.run(fail_then_cancel())
+    assert notifier.closed == 0  # nothing was fixed, so nothing is dismissed
+    # The alert is shown again, button and all, so it can be tried later.
+    assert notifier.offered == [
+        [(cli.REPAIR_ACTION, "Re-pair")],
+        [(cli.REPAIR_ACTION, "Re-pair")],
+    ]
+    assert "cancelled" in notifier.bodies[-1]
+
+
+def test_pair_command_takes_a_code(tmp_path, monkeypatch, capsys):
+    fake_avahi_by_type(tmp_path)
+    fake_adb(tmp_path, monkeypatch, 'echo "Successfully paired to $2 [guid=adb-SERIAL]"\n')
+    monkeypatch.setenv("CAMERA_SIGN_PHONE", "mdns:SERIAL")
+    assert cli.main(["pair", "--code", "979 548"]) == 0
+    assert capsys.readouterr().out.strip() == "paired with SERIAL at 10.0.0.9:43039"
+
+
+def test_pair_command_rejects_a_code_that_cannot_be_one(tmp_path, monkeypatch):
+    fake_avahi_by_type(tmp_path)
+    fake_adb(tmp_path, monkeypatch, "exit 1\n")
+    monkeypatch.setenv("CAMERA_SIGN_PHONE", "mdns:SERIAL")
+    assert cli.main(["pair", "--code", "nope"]) == 1
+
+
+def test_pair_needs_a_serial_not_an_address(monkeypatch):
+    monkeypatch.setenv("CAMERA_SIGN_PHONE", "10.0.0.9:5555")
+    with pytest.raises(SystemExit):
+        parse_args(["pair"])
+    monkeypatch.delenv("CAMERA_SIGN_PHONE", raising=False)
+    with pytest.raises(SystemExit):
+        parse_args(["pair"])
+    monkeypatch.setenv("CAMERA_SIGN_PHONE", "mdns:SERIAL")
+    assert parse_args(["pair"]).command == "pair"
+
+
+def test_code_belongs_to_pair_alone(monkeypatch):
+    monkeypatch.setenv("CAMERA_SIGN_HOST", "10.0.0.9")
+    with pytest.raises(SystemExit):
+        parse_args(["status", "--code", "979548"])
 
 
 def test_plug_change_notifications():
